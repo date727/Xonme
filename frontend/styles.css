@@ -134,6 +134,35 @@ h1 {
   color: var(--muted);
 }
 
+.steps {
+  margin: 16px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.steps li {
+  list-style: decimal;
+  padding: 4px 0;
+  transition: color 0.2s ease;
+}
+
+.steps li.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.steps li.done {
+  color: #2a6f4d;
+  font-weight: 600;
+}
+
+.steps li.error {
+  color: #b42318;
+  font-weight: 600;
+}
+
 .result {
   line-height: 1.6;
   color: var(--ink);

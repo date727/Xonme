@@ -32,7 +32,7 @@ SILICONFLOW_MODEL=your_model_here
 4. Start the API server:
 
 ```bash
-uvicorn backend.app.main:app --reload
+uvicorn backend.app.main:app --host 0.0.0.0 --port 8765 --reload
 ```
 
 The API listens on http://127.0.0.1:8000.

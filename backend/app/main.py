@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -8,6 +9,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -86,6 +88,10 @@ def generate_ai_analysis(csv_text: str) -> str:
         raise HTTPException(status_code=502, detail="Unexpected SiliconFlow response format") from exc
 
 
+def sse_event(event: str, data: str) -> str:
+    return f"event: {event}\ndata: {data}\n\n"
+
+
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     ensure_dirs()
@@ -125,3 +131,57 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         csv_path=str(csv_path),
         analysis_markdown=analysis_markdown,
     )
+
+
+@app.post("/analyze/stream")
+async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse:
+    def stream() -> str:
+        ensure_dirs()
+
+        name = uuid.uuid4().hex
+        upload_path = UPLOADS_DIR / f"{name}.pcap"
+        output_dir = OUTPUTS_DIR / name
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        with upload_path.open("wb") as f:
+            shutil.copyfileobj(pcap.file, f)
+
+        try:
+            yield sse_event("step", "zeek")
+            run_command(["zeek", "readpcap", str(upload_path), str(output_dir)])
+
+            yield sse_event("step", "rita")
+            run_command(["rita", "import", f"--database={name}", f"--logs={output_dir}"])
+
+            try:
+                view_result = subprocess.run(
+                    ["rita", "view", "--stdout", name],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                stderr = (exc.stderr or "").strip()
+                stdout = (exc.stdout or "").strip()
+                detail = stderr or stdout or "rita view failed"
+                raise HTTPException(status_code=500, detail=detail) from exc
+
+            csv_text = view_result.stdout
+            csv_path = OUTPUTS_DIR / f"{name}.csv"
+            csv_path.write_text(csv_text, encoding="utf-8")
+
+            yield sse_event("step", "ai")
+            analysis_markdown = generate_ai_analysis(csv_text)
+
+            payload = json.dumps(
+                {
+                    "name": name,
+                    "csv_path": str(csv_path),
+                    "analysis_markdown": analysis_markdown,
+                }
+            )
+            yield sse_event("result", payload)
+        except HTTPException as exc:
+            yield sse_event("error", exc.detail)
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
