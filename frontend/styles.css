@@ -1,0 +1,164 @@
+:root {
+  color-scheme: light;
+  --bg: #f5efe7;
+  --panel: #fffdf9;
+  --ink: #1f2428;
+  --muted: #6b7077;
+  --accent: #e76f51;
+  --accent-dark: #c85a3f;
+  --border: #eadfd2;
+  --shadow: 0 20px 40px rgba(31, 36, 40, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "IBM Plex Sans", sans-serif;
+  color: var(--ink);
+  background: radial-gradient(circle at top left, #fbe7d4 0%, transparent 50%),
+    radial-gradient(circle at 40% 20%, #f7c9b3 0%, transparent 60%),
+    linear-gradient(180deg, #f5efe7 0%, #efe2d2 100%);
+}
+
+.shell {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+  display: grid;
+  gap: 28px;
+}
+
+.hero {
+  display: grid;
+  gap: 12px;
+  animation: fadeUp 0.6s ease-out;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+h1 {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(2.6rem, 4vw, 4rem);
+  margin: 0;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  animation: fadeUp 0.75s ease-out;
+}
+
+.drop-zone {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+  transition: border 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+}
+
+.drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(231, 111, 81, 0.08);
+}
+
+.drop-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.drop-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.drop-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.file-name {
+  color: var(--muted);
+}
+
+.primary {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-family: "Space Grotesk", sans-serif;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.primary:hover {
+  background: var(--accent-dark);
+  transform: translateY(-1px);
+}
+
+.status {
+  margin-top: 12px;
+  color: var(--muted);
+}
+
+.result {
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.result h1,
+.result h2,
+.result h3 {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

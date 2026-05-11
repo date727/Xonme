@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PCAP Insight</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap"
+    rel="stylesheet"
+  />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">Network Forensics</p>
+      <h1>PCAP Insight</h1>
+      <p class="subtitle">Drop a PCAP, generate Zeek + RITA logs, and get an AI summary.</p>
+    </header>
+
+    <section class="panel">
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-content">
+          <p class="drop-title">Drag &amp; drop your PCAP here</p>
+          <p class="drop-subtitle">or click to choose a file</p>
+        </div>
+        <input id="pcap-input" type="file" accept=".pcap,.pcapng" />
+      </div>
+
+      <div class="controls">
+        <span id="file-name" class="file-name">No file selected</span>
+        <button id="analyze-btn" class="primary">Analyze</button>
+      </div>
+
+      <p id="status" class="status">Waiting for a file.</p>
+    </section>
+
+    <section class="panel">
+      <h2>AI Analysis</h2>
+      <div id="result" class="result">Upload a PCAP to see the report.</div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
