@@ -6,6 +6,14 @@ import uuid
 from pathlib import Path
 
 import requests
+
+# LSTM beacon detection — gracefully degrades if dependencies are missing
+try:
+    from app.lstm_predictor import predict_beacons, format_for_prompt as _fmt_lstm
+
+    _LSTM_AVAILABLE = True
+except ImportError:
+    _LSTM_AVAILABLE = False
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,9 +52,39 @@ def ensure_dirs() -> None:
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def run_command(cmd: list[str], cwd: Path | None = None) -> None:
+def _collect_zeek_logs(log_dir: Path) -> str:
+    """Read all Zeek TSV log files and return them as a single text blob.
+
+    Used as fallback when RITA import/view fails, so the LLM still has
+    raw Zeek data to analyse.
+    """
+    parts: list[str] = []
+    for log_path in sorted(log_dir.glob("*.log")):
+        try:
+            content = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        # Strip Zeek header lines (#separator, #set_separator, #empty_field, #unset_field)
+        # but keep #fields and #types so the LLM can understand column layout
+        lines = content.splitlines()
+        filtered = [ln for ln in lines if not ln.startswith("#separator")]
+        parts.append(f"=== {log_path.name} ===\n" + "\n".join(filtered))
+    return "\n\n".join(parts) if parts else "(No Zeek logs found)"
+
+
+def run_command(
+    cmd: list[str], cwd: Path | None = None, timeout: int | None = None
+) -> None:
+    """Run a subprocess, raise HTTPException(500) on non-zero exit or timeout."""
     try:
-        subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+        subprocess.run(
+            cmd, cwd=cwd, check=True, capture_output=True, text=True, timeout=timeout
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Command timed out after {timeout}s: {' '.join(cmd)}",
+        ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         stdout = (exc.stdout or "").strip()
@@ -54,7 +92,7 @@ def run_command(cmd: list[str], cwd: Path | None = None) -> None:
         raise HTTPException(status_code=500, detail=detail) from exc
 
 
-def generate_ai_analysis(csv_text: str) -> str:
+def generate_ai_analysis(csv_text: str, lstm_results: dict | None = None, *, rita_ok: bool = True) -> str:
     if not SILICONFLOW_BASE_URL or not SILICONFLOW_API_KEY or not SILICONFLOW_MODEL:
         raise HTTPException(status_code=500, detail="Missing SiliconFlow API configuration")
 
@@ -63,12 +101,20 @@ def generate_ai_analysis(csv_text: str) -> str:
         "Authorization": f"Bearer {SILICONFLOW_API_KEY}",
         "Content-Type": "application/json",
     }
+
+    # Build the base prompt — RITA CSV when available, raw Zeek logs otherwise
+    source = "RITA CSV report" if rita_ok else "Zeek network log data"
     prompt = (
-        "You are a security analyst. Review the following RITA CSV report "
+        f"You are a security analyst. Review the following {source} "
         "and summarize notable findings, risks, and recommended next steps. "
         "Return Markdown.\n\n"
-        f"{csv_text}"
     )
+
+    # Augment with LSTM beacon detection results when available
+    if lstm_results and lstm_results.get("total_flagged", 0) > 0:
+        prompt += _fmt_lstm(lstm_results) + "\n\n---\n\n"
+
+    prompt += csv_text
     payload = {
         "model": SILICONFLOW_MODEL,
         "messages": [{"role": "user", "content": prompt}],
@@ -104,27 +150,57 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     with upload_path.open("wb") as f:
         shutil.copyfileobj(pcap.file, f)
 
-    run_command(["zeek", "readpcap", str(upload_path), str(output_dir)])
-    run_command(["rita", "import", f"--database={name}", f"--logs={output_dir}"])
+    # Run Zeek: -r reads PCAP, -C ignores checksum errors,
+    # LogAscii::use_json=F ensures TSV output (required by RITA)
+    run_command(
+        ["zeek", "-r", str(upload_path), "-C", "LogAscii::use_json=F"],
+        cwd=output_dir,
+    )
+
+    # Verify Zeek produced logs before handing off to RITA
+    zeek_logs = list(output_dir.glob("*.log"))
+    if not zeek_logs:
+        raise HTTPException(
+            status_code=500, detail="Zeek did not produce any log files"
+        )
+
+    # --- RITA import + view (non-blocking: falls back to raw Zeek logs on failure) ---
+    rita_ok = False
+    csv_text = ""
 
     try:
-        view_result = subprocess.run(
-            ["rita", "view", "--stdout", name],
-            check=True,
-            capture_output=True,
-            text=True,
+        # RITA v5+ may start Docker containers — give it generous timeout
+        run_command(
+            ["rita", "import", f"--database={name}", f"--logs={output_dir}"],
+            timeout=600,
         )
-    except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
-        stdout = (exc.stdout or "").strip()
-        detail = stderr or stdout or "rita view failed"
-        raise HTTPException(status_code=500, detail=detail) from exc
+    except HTTPException:
+        pass  # import failed → fallback below
+    else:
+        try:
+            view_result = subprocess.run(
+                ["rita", "view", "--stdout", name],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass  # view failed → fallback below
+        else:
+            csv_text = view_result.stdout
+            rita_ok = True
 
-    csv_text = view_result.stdout
+    if not rita_ok:
+        csv_text = _collect_zeek_logs(output_dir)
+
     csv_path = OUTPUTS_DIR / f"{name}.csv"
     csv_path.write_text(csv_text, encoding="utf-8")
 
-    analysis_markdown = generate_ai_analysis(csv_text)
+    # LSTM requires RITA's iat_oresp_* columns — skip when RITA is unavailable
+    lstm_results = predict_beacons(csv_text) if _LSTM_AVAILABLE and rita_ok else None
+
+    analysis_markdown = generate_ai_analysis(csv_text, lstm_results=lstm_results, rita_ok=rita_ok)
 
     return AnalyzeResponse(
         name=name,
@@ -148,30 +224,60 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
 
         try:
             yield sse_event("step", "zeek")
-            run_command(["zeek", "readpcap", str(upload_path), str(output_dir)])
+            # Run Zeek: -r reads PCAP, -C ignores checksum errors,
+            # LogAscii::use_json=F ensures TSV output (required by RITA)
+            run_command(
+                ["zeek", "-r", str(upload_path), "-C", "LogAscii::use_json=F"],
+                cwd=output_dir,
+            )
 
+            # Verify Zeek produced logs before handing off to RITA
+            zeek_logs = list(output_dir.glob("*.log"))
+            if not zeek_logs:
+                raise HTTPException(
+                    status_code=500, detail="Zeek did not produce any log files"
+                )
+
+            # --- RITA import + view (non-blocking: falls back to raw Zeek logs on failure) ---
             yield sse_event("step", "rita")
-            run_command(["rita", "import", f"--database={name}", f"--logs={output_dir}"])
+            rita_ok = False
+            csv_text = ""
 
             try:
-                view_result = subprocess.run(
-                    ["rita", "view", "--stdout", name],
-                    check=True,
-                    capture_output=True,
-                    text=True,
+                # RITA v5+ may start Docker containers — give it generous timeout
+                run_command(
+                    ["rita", "import", f"--database={name}", f"--logs={output_dir}"],
+                    timeout=600,
                 )
-            except subprocess.CalledProcessError as exc:
-                stderr = (exc.stderr or "").strip()
-                stdout = (exc.stdout or "").strip()
-                detail = stderr or stdout or "rita view failed"
-                raise HTTPException(status_code=500, detail=detail) from exc
+            except HTTPException:
+                pass  # import failed → fallback below
+            else:
+                try:
+                    view_result = subprocess.run(
+                        ["rita", "view", "--stdout", name],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    pass  # view failed → fallback below
+                else:
+                    csv_text = view_result.stdout
+                    rita_ok = True
 
-            csv_text = view_result.stdout
+            if not rita_ok:
+                csv_text = _collect_zeek_logs(output_dir)
+
             csv_path = OUTPUTS_DIR / f"{name}.csv"
             csv_path.write_text(csv_text, encoding="utf-8")
 
+            # LSTM requires RITA's iat_oresp_* columns — skip when RITA is unavailable
+            yield sse_event("step", "lstm")
+            lstm_results = predict_beacons(csv_text) if _LSTM_AVAILABLE and rita_ok else None
+
             yield sse_event("step", "ai")
-            analysis_markdown = generate_ai_analysis(csv_text)
+            analysis_markdown = generate_ai_analysis(csv_text, lstm_results=lstm_results, rita_ok=rita_ok)
 
             payload = json.dumps(
                 {

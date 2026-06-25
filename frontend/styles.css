@@ -166,12 +166,61 @@ h1 {
 .result {
   line-height: 1.6;
   color: var(--ink);
+  overflow-x: auto;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .result h1,
 .result h2,
 .result h3 {
   font-family: "Space Grotesk", sans-serif;
+}
+
+/* Prevent wide content (tables, code blocks, long URLs) from stretching the page */
+.result table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+  border-collapse: collapse;
+}
+
+.result th,
+.result td {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.result th {
+  background: rgba(231, 111, 81, 0.08);
+  font-weight: 600;
+}
+
+.result pre,
+.result code {
+  max-width: 100%;
+  overflow-x: auto;
+  word-break: break-all;
+}
+
+.result pre {
+  background: #f4f0ea;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.result img {
+  max-width: 100%;
+  height: auto;
+}
+
+.result p,
+.result li,
+.result blockquote {
+  max-width: 100%;
 }
 
 @keyframes fadeUp {

@@ -1,5 +1,18 @@
 const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8765`;
 
+// Safe markdown renderer — falls back to plain-text <pre> when marked is unavailable
+const renderMarkdown = (text) => {
+  if (typeof marked !== "undefined" && typeof marked.parse === "function") {
+    return marked.parse(text);
+  }
+  // Fallback: escape HTML and wrap in <pre> so raw text is at least readable
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `<pre style="white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word">${escaped}</pre>`;
+};
+
 const dropZone = document.getElementById("drop-zone");
 const pcapInput = document.getElementById("pcap-input");
 const fileName = document.getElementById("file-name");
@@ -10,10 +23,11 @@ const stepsEl = document.getElementById("steps");
 
 let selectedFile = null;
 
-const stepOrder = ["zeek", "rita", "ai"];
+const stepOrder = ["zeek", "rita", "lstm", "ai"];
 const stepLabels = {
   zeek: "Running Zeek...",
   rita: "Running RITA...",
+  lstm: "Running LSTM beacon detection...",
   ai: "Sending to AI...",
 };
 
@@ -151,7 +165,7 @@ analyzeBtn.addEventListener("click", async () => {
       if (eventName === "result") {
         const payload = JSON.parse(data);
         const markdown = payload.analysis_markdown || "No analysis returned.";
-        resultEl.innerHTML = marked.parse(markdown);
+        resultEl.innerHTML = renderMarkdown(markdown);
         markAllDone();
         setStatus("Analysis complete.");
         return;
