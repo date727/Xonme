@@ -1,0 +1,24 @@
+{
+  "feature_cols": [
+    "iat_oresp_total",
+    "iat_oresp_min",
+    "iat_oresp_max",
+    "iat_oresp_mean",
+    "iat_oresp_stddev",
+    "iat_oresp_nf_0",
+    "iat_oresp_nf_1",
+    "iat_oresp_nf_2",
+    "iat_oresp_nf_3",
+    "iat_oresp_nf_4",
+    "iat_oresp_nf_5",
+    "iat_oresp_nf_6",
+    "iat_oresp_nf_7",
+    "iat_oresp_nf_8",
+    "iat_oresp_nf_9"
+  ],
+  "seq_length": 10,
+  "input_shape": [
+    10,
+    15
+  ]
+}
