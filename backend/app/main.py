@@ -92,6 +92,26 @@ def run_command(
         raise HTTPException(status_code=500, detail=detail) from exc
 
 
+def run_zeek(pcap_path: str, output_dir: Path) -> None:
+    """Run Zeek on a PCAP file, trying standard CLI first, then readpcap fallback.
+
+    Standard:  zeek -r <pcap> -C LogAscii::use_json=F  (cwd = output_dir)
+    Fallback:  zeek readpcap <pcap> <output_dir>
+    """
+    try:
+        run_command(
+            ["zeek", "-r", pcap_path, "-C", "LogAscii::use_json=F"],
+            cwd=output_dir,
+        )
+        return
+    except HTTPException:
+        pass
+
+    run_command(
+        ["zeek", "readpcap", pcap_path, str(output_dir)],
+    )
+
+
 def generate_ai_analysis(csv_text: str, lstm_results: dict | None = None, *, rita_ok: bool = True) -> str:
     if not SILICONFLOW_BASE_URL or not SILICONFLOW_API_KEY or not SILICONFLOW_MODEL:
         raise HTTPException(status_code=500, detail="Missing SiliconFlow API configuration")
@@ -150,12 +170,7 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     with upload_path.open("wb") as f:
         shutil.copyfileobj(pcap.file, f)
 
-    # Run Zeek: -r reads PCAP, -C ignores checksum errors,
-    # LogAscii::use_json=F ensures TSV output (required by RITA)
-    run_command(
-        ["zeek", "-r", str(upload_path), "-C", "LogAscii::use_json=F"],
-        cwd=output_dir,
-    )
+    run_zeek(str(upload_path), output_dir)
 
     # Verify Zeek produced logs before handing off to RITA
     zeek_logs = list(output_dir.glob("*.log"))
@@ -224,12 +239,7 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
 
         try:
             yield sse_event("step", "zeek")
-            # Run Zeek: -r reads PCAP, -C ignores checksum errors,
-            # LogAscii::use_json=F ensures TSV output (required by RITA)
-            run_command(
-                ["zeek", "-r", str(upload_path), "-C", "LogAscii::use_json=F"],
-                cwd=output_dir,
-            )
+            run_zeek(str(upload_path), output_dir)
 
             # Verify Zeek produced logs before handing off to RITA
             zeek_logs = list(output_dir.glob("*.log"))
