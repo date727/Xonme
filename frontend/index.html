@@ -152,7 +152,17 @@
           </section>
 
           <section class="panel result-panel">
-            <h2>分析结果</h2>
+            <div class="result-head">
+              <h2>分析结果</h2>
+              <div class="report-actions" aria-label="分析报告下载">
+                <select id="report-format" aria-label="选择报告格式">
+                  <option value="md">MD</option>
+                  <option value="doc">Word</option>
+                  <option value="pdf">PDF</option>
+                </select>
+                <button id="download-report-btn" class="report-download" type="button" disabled>下载报告</button>
+              </div>
+            </div>
             <div id="result" class="result">完成分析后，Markdown 报告会显示在这里。</div>
           </section>
         </aside>

@@ -34,10 +34,13 @@ const apiBaseInput = $("#api-base-input");
 const modelSelect = $("#model-select");
 const currentEndpoint = $("#current-endpoint");
 const caseTableBody = $("#case-table-body");
+const reportFormat = $("#report-format");
+const downloadReportBtn = $("#download-report-btn");
 
 let selectedFile = null;
 let analysisRunning = false;
 let currentStep = null;
+let latestReportMarkdown = "";
 
 const stepOrder = ["zeek", "rita", "lstm", "ai"];
 const stepLabels = {
@@ -59,6 +62,10 @@ const updateEndpointDisplay = () => {
 const setStatus = (message, isError = false) => {
   statusEl.textContent = message;
   statusEl.classList.toggle("error", isError);
+};
+
+const setReportDownloadEnabled = (enabled) => {
+  if (downloadReportBtn) downloadReportBtn.disabled = !enabled;
 };
 
 const resetSteps = () => {
@@ -102,6 +109,80 @@ const setFile = (file) => {
   selectedFile = file;
   fileName.textContent = file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "未选择文件";
   if (file) setStatus("文件已选择，可以开始分析。");
+};
+
+const getReportBaseName = () => {
+  const sourceName = selectedFile?.name ? selectedFile.name.replace(/\.[^.]+$/, "") : "c2sherlock-report";
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  return `${sourceName}-${stamp}`;
+};
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const createReportHtml = () => `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>C2Sherlock 分析报告</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #0f172a; line-height: 1.75; padding: 32px; }
+    h1, h2, h3 { color: #064e3b; line-height: 1.35; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    th, td { border: 1px solid #d8e4ed; padding: 8px 10px; text-align: left; }
+    th { background: #ecfdf5; }
+    pre, code { font-family: Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <h1>C2Sherlock 分析报告</h1>
+  ${renderMarkdown(latestReportMarkdown)}
+</body>
+</html>`;
+
+const exportPdf = () => {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    setStatus("浏览器拦截了 PDF 导出窗口，请允许弹窗后重试。", true);
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(createReportHtml());
+  printWindow.document.close();
+  window.setTimeout(() => {
+    printWindow.focus();
+    printWindow.print();
+  }, 200);
+};
+
+const downloadReport = () => {
+  if (!latestReportMarkdown.trim()) {
+    setStatus("当前还没有可下载的分析报告。", true);
+    return;
+  }
+
+  const baseName = getReportBaseName();
+  const format = reportFormat?.value || "md";
+
+  if (format === "md") {
+    downloadBlob(new Blob([latestReportMarkdown], { type: "text/markdown;charset=utf-8" }), `${baseName}.md`);
+    return;
+  }
+
+  if (format === "doc") {
+    downloadBlob(new Blob([createReportHtml()], { type: "application/msword;charset=utf-8" }), `${baseName}.doc`);
+    return;
+  }
+
+  exportPdf();
 };
 
 const preventDefaults = (event) => {
@@ -206,7 +287,9 @@ const handleStreamEvent = (eventName, data) => {
   if (eventName === "result") {
     const payload = JSON.parse(data);
     const markdown = payload.analysis_markdown || "后端未返回分析报告。";
+    latestReportMarkdown = markdown;
     resultEl.innerHTML = renderMarkdown(markdown);
+    setReportDownloadEnabled(true);
     markAllDone();
     setStatus("分析完成。");
     return;
@@ -254,6 +337,8 @@ const analyzeSelectedFile = async () => {
   updateEndpointDisplay();
 
   setStatus("正在上传样本，请勿关闭页面。切换栏目不会中断当前分析。");
+  latestReportMarkdown = "";
+  setReportDownloadEnabled(false);
   resultEl.textContent = "分析任务运行中...";
   resetSteps();
 
@@ -293,6 +378,8 @@ const analyzeSelectedFile = async () => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "分析请求失败";
+    latestReportMarkdown = "";
+    setReportDownloadEnabled(false);
     resultEl.textContent = "分析失败，请检查后端地址、网络连通性和后端日志。";
     setStatus(message, true);
     markError(currentStep);
@@ -365,3 +452,4 @@ setupApiConfig();
 setupUpload();
 renderCaseTable();
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
+downloadReportBtn?.addEventListener("click", downloadReport);
