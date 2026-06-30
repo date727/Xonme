@@ -1,11 +1,18 @@
-const API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:8765`;
+const STORAGE_KEYS = {
+  apiBase: "c2s.apiBase",
+  modelName: "c2s.modelName",
+};
+
+const defaultApiBase =
+  window.location.protocol === "file:"
+    ? "http://127.0.0.1:8765"
+    : `${window.location.protocol}//${window.location.hostname}:8765`;
 
 // Safe markdown renderer — falls back to plain-text <pre> when marked is unavailable
 const renderMarkdown = (text) => {
   if (typeof marked !== "undefined" && typeof marked.parse === "function") {
     return marked.parse(text);
   }
-  // Fallback: escape HTML and wrap in <pre> so raw text is at least readable
   const escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -13,50 +20,63 @@ const renderMarkdown = (text) => {
   return `<pre style="white-space:pre-wrap;word-wrap:break-word;overflow-wrap:break-word">${escaped}</pre>`;
 };
 
-const dropZone = document.getElementById("drop-zone");
-const pcapInput = document.getElementById("pcap-input");
-const fileName = document.getElementById("file-name");
-const analyzeBtn = document.getElementById("analyze-btn");
-const statusEl = document.getElementById("status");
-const resultEl = document.getElementById("result");
-const stepsEl = document.getElementById("steps");
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+const dropZone = $("#drop-zone");
+const pcapInput = $("#pcap-input");
+const fileName = $("#file-name");
+const analyzeBtn = $("#analyze-btn");
+const statusEl = $("#status");
+const resultEl = $("#result");
+const stepsEl = $("#steps");
+const apiBaseInput = $("#api-base-input");
+const modelSelect = $("#model-select");
+const currentEndpoint = $("#current-endpoint");
+const caseTableBody = $("#case-table-body");
 
 let selectedFile = null;
+let analysisRunning = false;
+let currentStep = null;
 
 const stepOrder = ["zeek", "rita", "lstm", "ai"];
 const stepLabels = {
-  zeek: "Running Zeek...",
-  rita: "Running RITA...",
-  lstm: "Running LSTM beacon detection...",
-  ai: "Sending to AI...",
+  zeek: "正在进行日志解析...",
+  rita: "正在运行规则引擎...",
+  lstm: "正在进行 LSTM 时序检测...",
+  ai: "正在生成大模型研判报告...",
 };
 
-const setStatus = (message) => {
+const normalizeApiBase = (value) => value.trim().replace(/\/+$/, "");
+
+const getApiBase = () => normalizeApiBase(apiBaseInput.value || defaultApiBase);
+
+const updateEndpointDisplay = () => {
+  const base = getApiBase();
+  currentEndpoint.textContent = `${base || "请填写后端地址"}/analyze/stream`;
+};
+
+const setStatus = (message, isError = false) => {
   statusEl.textContent = message;
+  statusEl.classList.toggle("error", isError);
 };
 
 const resetSteps = () => {
   stepOrder.forEach((step) => {
     const item = stepsEl.querySelector(`[data-step="${step}"]`);
-    if (item) {
-      item.classList.remove("active", "done", "error");
-    }
+    if (item) item.classList.remove("active", "done", "error");
   });
 };
 
 const markStep = (step) => {
+  currentStep = step;
   const stepIndex = stepOrder.indexOf(step);
   stepOrder.forEach((current, index) => {
     const item = stepsEl.querySelector(`[data-step="${current}"]`);
-    if (!item) {
-      return;
-    }
+    if (!item) return;
     item.classList.remove("active", "done", "error");
-    if (index < stepIndex) {
-      item.classList.add("done");
-    } else if (index === stepIndex) {
-      item.classList.add("active");
-    }
+    if (index < stepIndex) item.classList.add("done");
+    if (index === stepIndex) item.classList.add("active");
   });
 };
 
@@ -71,10 +91,7 @@ const markAllDone = () => {
 };
 
 const markError = (step) => {
-  if (!step) {
-    return;
-  }
-  const item = stepsEl.querySelector(`[data-step="${step}"]`);
+  const item = step ? stepsEl.querySelector(`[data-step="${step}"]`) : null;
   if (item) {
     item.classList.remove("active", "done");
     item.classList.add("error");
@@ -83,7 +100,8 @@ const markError = (step) => {
 
 const setFile = (file) => {
   selectedFile = file;
-  fileName.textContent = file ? file.name : "No file selected";
+  fileName.textContent = file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "未选择文件";
+  if (file) setStatus("文件已选择，可以开始分析。");
 };
 
 const preventDefaults = (event) => {
@@ -91,129 +109,259 @@ const preventDefaults = (event) => {
   event.stopPropagation();
 };
 
-["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-  dropZone.addEventListener(eventName, preventDefaults, false);
-});
-
-["dragenter", "dragover"].forEach((eventName) => {
-  dropZone.addEventListener(eventName, () => dropZone.classList.add("dragover"));
-});
-
-["dragleave", "drop"].forEach((eventName) => {
-  dropZone.addEventListener(eventName, () => dropZone.classList.remove("dragover"));
-});
-
-dropZone.addEventListener("drop", (event) => {
-  const [file] = event.dataTransfer.files;
-  if (file) {
-    setFile(file);
-    setStatus("Ready to analyze.");
+const switchTab = (tabName) => {
+  $$(".nav-btn").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === tabName);
+  });
+  $$(".tab-page").forEach((page) => {
+    page.classList.toggle("active", page.dataset.page === tabName);
+  });
+  if (history.replaceState) {
+    history.replaceState(null, "", `#${tabName}`);
   }
-});
+};
 
-pcapInput.addEventListener("change", (event) => {
-  const [file] = event.target.files;
-  if (file) {
-    setFile(file);
-    setStatus("Ready to analyze.");
-  }
-});
+const setupTabs = () => {
+  $$("[data-tab]").forEach((control) => {
+    control.addEventListener("click", () => switchTab(control.dataset.tab));
+  });
+  $$("[data-tab-link]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      switchTab(link.dataset.tabLink);
+    });
+  });
+  const initial = window.location.hash.replace("#", "") || "home";
+  if ($(`[data-page="${initial}"]`)) switchTab(initial);
+};
 
-analyzeBtn.addEventListener("click", async () => {
-  if (!selectedFile) {
-    setStatus("Please choose a PCAP file first.");
+const setupPrincipleTabs = () => {
+  $$(".principle-link").forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = button.dataset.target;
+      const activeSection = document.getElementById(target);
+      $$(".principle-link").forEach((item) => item.classList.toggle("active", item === button));
+      $$(".principle-section").forEach((section) => {
+        section.classList.toggle("active", section === activeSection);
+      });
+      activeSection?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  });
+};
+
+const setupApiConfig = () => {
+  apiBaseInput.value = window.localStorage.getItem(STORAGE_KEYS.apiBase) || defaultApiBase;
+  modelSelect.value = window.localStorage.getItem(STORAGE_KEYS.modelName) || modelSelect.value;
+  updateEndpointDisplay();
+
+  apiBaseInput.addEventListener("input", () => {
+    window.localStorage.setItem(STORAGE_KEYS.apiBase, getApiBase());
+    updateEndpointDisplay();
+  });
+
+  modelSelect.addEventListener("change", () => {
+    window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
+  });
+
+  $$(".chip[data-api]").forEach((button) => {
+    button.addEventListener("click", () => {
+      apiBaseInput.value = button.dataset.api;
+      window.localStorage.setItem(STORAGE_KEYS.apiBase, getApiBase());
+      updateEndpointDisplay();
+    });
+  });
+};
+
+const setupUpload = () => {
+  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+    dropZone.addEventListener(eventName, preventDefaults, false);
+  });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.add("dragover"));
+  });
+
+  ["dragleave", "drop"].forEach((eventName) => {
+    dropZone.addEventListener(eventName, () => dropZone.classList.remove("dragover"));
+  });
+
+  dropZone.addEventListener("drop", (event) => {
+    const [file] = event.dataTransfer.files;
+    if (file) setFile(file);
+  });
+
+  pcapInput.addEventListener("change", (event) => {
+    const [file] = event.target.files;
+    if (file) setFile(file);
+  });
+};
+
+const handleStreamEvent = (eventName, data) => {
+  if (eventName === "step") {
+    markStep(data);
+    setStatus(stepLabels[data] || "正在分析...");
     return;
   }
 
+  if (eventName === "result") {
+    const payload = JSON.parse(data);
+    const markdown = payload.analysis_markdown || "后端未返回分析报告。";
+    resultEl.innerHTML = renderMarkdown(markdown);
+    markAllDone();
+    setStatus("分析完成。");
+    return;
+  }
+
+  if (eventName === "error") {
+    markError(currentStep);
+    throw new Error(data || "分析失败");
+  }
+};
+
+const processSseBuffer = (state) => {
+  const parts = state.buffer.split("\n\n");
+  state.buffer = parts.pop() || "";
+  parts.forEach((part) => {
+    if (!part.trim()) return;
+    let eventName = "message";
+    let data = "";
+    part.split("\n").forEach((line) => {
+      if (line.startsWith("event:")) eventName = line.slice(6).trim();
+      if (line.startsWith("data:")) data += line.slice(5).trim();
+    });
+    handleStreamEvent(eventName, data);
+  });
+};
+
+const analyzeSelectedFile = async () => {
+  if (analysisRunning) return;
+  if (!selectedFile) {
+    setStatus("请先选择 PCAP 文件。", true);
+    return;
+  }
+
+  const apiBase = getApiBase();
+  if (!apiBase) {
+    setStatus("请先配置后端 API 地址。", true);
+    return;
+  }
+
+  analysisRunning = true;
   analyzeBtn.disabled = true;
-  setStatus("Uploading... this may take a while.");
-  resultEl.textContent = "Working...";
+  currentStep = null;
+  window.localStorage.setItem(STORAGE_KEYS.apiBase, apiBase);
+  window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
+  updateEndpointDisplay();
+
+  setStatus("正在上传样本，请勿关闭页面。切换栏目不会中断当前分析。");
+  resultEl.textContent = "分析任务运行中...";
   resetSteps();
 
   const formData = new FormData();
   formData.append("pcap", selectedFile);
-
-  let currentStep = null;
+  formData.append("model_name", modelSelect.value);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/analyze/stream`, {
+    const response = await fetch(`${apiBase}/analyze/stream`, {
       method: "POST",
       body: formData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || "Analysis failed");
+      throw new Error(errorText || `后端返回 ${response.status}`);
     }
 
     if (!response.body) {
-      throw new Error("Streaming not supported by the browser.");
+      throw new Error("当前浏览器不支持流式响应。");
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = "";
-
-    const handleEvent = (eventName, data) => {
-      if (eventName === "step") {
-        currentStep = data;
-        markStep(data);
-        setStatus(stepLabels[data] || "Working...");
-        return;
-      }
-
-      if (eventName === "result") {
-        const payload = JSON.parse(data);
-        const markdown = payload.analysis_markdown || "No analysis returned.";
-        resultEl.innerHTML = renderMarkdown(markdown);
-        markAllDone();
-        setStatus("Analysis complete.");
-        return;
-      }
-
-      if (eventName === "error") {
-        markError(currentStep);
-        throw new Error(data || "Analysis failed");
-      }
-    };
-
-    const processBuffer = () => {
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop();
-      parts.forEach((part) => {
-        if (!part.trim()) {
-          return;
-        }
-        let eventName = "message";
-        let data = "";
-        part.split("\n").forEach((line) => {
-          if (line.startsWith("event:")) {
-            eventName = line.slice(6).trim();
-          } else if (line.startsWith("data:")) {
-            data += line.slice(5).trim();
-          }
-        });
-        handleEvent(eventName, data);
-      });
-    };
+    const streamState = { buffer: "" };
 
     while (true) {
       const { value, done } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      processBuffer();
+      if (done) break;
+      streamState.buffer += decoder.decode(value, { stream: true });
+      processSseBuffer(streamState);
     }
 
-    if (buffer.trim()) {
-      buffer += "\n\n";
-      processBuffer();
+    if (streamState.buffer.trim()) {
+      streamState.buffer += "\n\n";
+      processSseBuffer(streamState);
     }
   } catch (error) {
-    resultEl.textContent = "An error occurred while analyzing the PCAP.";
-    setStatus(error.message);
+    const message = error instanceof Error ? error.message : "分析请求失败";
+    resultEl.textContent = "分析失败，请检查后端地址、网络连通性和后端日志。";
+    setStatus(message, true);
+    markError(currentStep);
   } finally {
+    analysisRunning = false;
     analyzeBtn.disabled = false;
   }
-});
+};
+
+const renderCaseTable = () => {
+  const cases = [
+    {
+      no: 1,
+      pcap: "benign_cdn_update.pcap",
+      src: "10.0.3.21",
+      dst: "cdn.example.net",
+      time: "2026-06-29 10:15",
+      status: "低风险 12%",
+      type: "low",
+      note: "软件更新与 CDN 访问，周期性弱。",
+    },
+    {
+      no: 2,
+      pcap: "cs2_dns_default_with_amazon.pcap",
+      src: "192.168.56.104",
+      dst: "45.77.***.21",
+      time: "2026-06-29 11:08",
+      status: "高风险 91%",
+      type: "high",
+      note: "稳定 Beacon 间隔，目标异常。",
+    },
+    {
+      no: 3,
+      pcap: "office_login_noise.pcapng",
+      src: "10.0.8.45",
+      dst: "login.microsoftonline.com",
+      time: "2026-06-29 13:22",
+      status: "低风险 18%",
+      type: "low",
+      note: "认证流量正常，连接分布不稳定。",
+    },
+    {
+      no: 4,
+      pcap: "dns_tunnel_suspect.pcap",
+      src: "172.16.4.9",
+      dst: "x9a-control.example",
+      time: "2026-06-29 15:46",
+      status: "高风险 86%",
+      type: "high",
+      note: "DNS 子域异常且请求频率稳定。",
+    },
+  ];
+
+  caseTableBody.innerHTML = cases.map((item) => `
+    <tr>
+      <td>${item.no}</td>
+      <td>${item.pcap}</td>
+      <td>${item.src}</td>
+      <td>${item.dst}</td>
+      <td>${item.time}</td>
+      <td><span class="status-pill status-${item.type}">${item.status}</span></td>
+      <td>${item.note}</td>
+    </tr>
+  `).join("");
+};
+
+setupTabs();
+setupPrincipleTabs();
+setupApiConfig();
+setupUpload();
+renderCaseTable();
+analyzeBtn.addEventListener("click", analyzeSelectedFile);

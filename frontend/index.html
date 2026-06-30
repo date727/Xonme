@@ -1,51 +1,530 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PCAP Insight</title>
+  <title>C2Sherlock 可视化分析平台</title>
   <link rel="stylesheet" href="styles.css" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap"
-    rel="stylesheet"
-  />
 </head>
 <body>
+  <header class="topbar">
+    <a class="brand" href="#home" data-tab-link="home" aria-label="C2Sherlock 首页">
+      <span class="brand-mark">C2</span>
+      <span>
+        <strong>C2Sherlock</strong>
+        <small>隐蔽 C2 通信检测与溯源系统</small>
+      </span>
+    </a>
+    <nav class="nav" aria-label="主导航">
+      <button class="nav-btn active" data-tab="home"><span class="nav-icon">⌂</span>首页</button>
+      <button class="nav-btn" data-tab="principle"><span class="nav-icon">□</span>原理</button>
+      <button class="nav-btn" data-tab="tool"><span class="nav-icon">▷</span>检测中心</button>
+      <button class="nav-btn" data-tab="capability"><span class="nav-icon">▥</span>能力</button>
+      <button class="nav-btn" data-tab="team"><span class="nav-icon">◌</span>团队</button>
+    </nav>
+  </header>
+
   <main class="shell">
-    <header class="hero">
-      <p class="eyebrow">Network Forensics</p>
-      <h1>PCAP Insight</h1>
-      <p class="subtitle">Drop a PCAP, generate Zeek + RITA logs, and get an AI summary.</p>
-    </header>
-
-    <section class="panel">
-      <div id="drop-zone" class="drop-zone">
-        <div class="drop-content">
-          <p class="drop-title">Drag &amp; drop your PCAP here</p>
-          <p class="drop-subtitle">or click to choose a file</p>
+    <section id="home" class="tab-page active" data-page="home">
+      <div class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow hero-badge">C2Sherlock</p>
+          <h1><span>面向隐蔽 C2 通信的</span><span>智能检测与溯源系统</span></h1>
+          <p class="subtitle">
+            C2Sherlock 将流量解析、规则检测、LSTM 时序识别与大模型研判串联为一条可解释分析链，
+            帮助安全人员从 PCAP 中定位可疑 Beacon 行为并形成处置建议
+          </p>
+          <div class="hero-actions">
+            <button class="primary" data-tab="tool">开始分析</button>
+            <button class="ghost" data-tab="principle">查看原理</button>
+          </div>
         </div>
-        <input id="pcap-input" type="file" accept=".pcap,.pcapng" />
+        <div class="hero-board" aria-label="分析流程概览">
+          <div class="board-head">
+            <div>
+              <span>Analysis Pipeline</span>
+              <strong>多引擎串行 + AI 融合研判</strong>
+            </div>
+            <span class="board-shield">◇</span>
+          </div>
+          <div class="pipeline-mini">
+            <span><b>1</b>PCAP</span>
+            <span><b>2</b>日志解析</span>
+            <span><b>3</b>规则引擎</span>
+            <span><b>4</b>LSTM 风险分数</span>
+            <span><b>5</b>大模型研判报告</span>
+          </div>
+        </div>
       </div>
 
-      <div class="controls">
-        <span id="file-name" class="file-name">No file selected</span>
-        <button id="analyze-btn" class="primary">Analyze</button>
-      </div>
-
-      <p id="status" class="status">Waiting for a file.</p>
-      <ol id="steps" class="steps">
-        <li data-step="zeek">Run Zeek</li>
-        <li data-step="rita">Run RITA</li>
-        <li data-step="lstm">LSTM Beacon Detection</li>
-        <li data-step="ai">Send to AI</li>
-      </ol>
+      <section class="section-block">
+        <div class="section-heading">
+          <p class="eyebrow">Core Capabilities</p>
+          <h2>核心能力</h2>
+        </div>
+        <div class="core-grid">
+          <article class="feature-card">
+            <span class="feature-icon">01</span>
+            <h3>规则检测引擎</h3>
+            <p>基于连接间隔、数据量稳定性和持续通信特征，快速筛查可疑 Beacon 候选。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon mint">02</span>
+            <h3>LSTM 时序检测</h3>
+            <p>学习复杂外联节奏，补充固定规则难以覆盖的低频、弱周期异常模式。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon cyan">03</span>
+            <h3>溯源研判 / 大模型报告</h3>
+            <p>融合检测证据，输出可读的威胁概览、重点连接解释和处置建议。</p>
+          </article>
+        </div>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>AI Analysis</h2>
-      <div id="result" class="result">Upload a PCAP to see the report.</div>
+    <section id="tool" class="tab-page" data-page="tool">
+      <div class="section-heading page-heading console-heading">
+        <p class="eyebrow hero-badge">检测中心</p>
+        <h1>启动 PCAP 检测任务</h1>
+        <p>连接后端服务，上传 PCAP 文件，执行隐蔽 C2 通信检测、溯源分析及智能研判。</p>
+      </div>
+
+      <div class="workspace">
+        <section class="panel control-panel">
+          <div class="panel-title">
+            <span class="panel-icon">⚡</span>
+            <div>
+              <h2>运行配置</h2>
+              <p>上传和 SSE 请求将使用这里配置的后端地址。</p>
+            </div>
+          </div>
+
+          <div class="config-grid">
+            <label class="field">
+              <span>后端 API 地址</span>
+              <input id="api-base-input" type="text" spellcheck="false" placeholder="http://127.0.0.1:8765" />
+            </label>
+            <label class="field">
+              <span>模型 / API 名称</span>
+              <select id="model-select">
+                <option value="SiliconFlow 默认模型">SiliconFlow 默认模型</option>
+                <option value="Qwen / DeepSeek 兼容模型">Qwen / DeepSeek 兼容模型</option>
+                <option value="自定义后端配置模型">自定义后端配置模型</option>
+              </select>
+            </label>
+          </div>
+          <div class="quick-actions">
+            <button class="chip" data-api="http://127.0.0.1:8765">本机后端</button>
+            <button class="chip" data-api="http://172.20.10.13:8765">远程 Ubuntu 示例</button>
+            <button class="chip" data-api="http://192.168.1.23:8765">局域网示例</button>
+          </div>
+          <p class="request-line">当前请求：<code id="current-endpoint">http://127.0.0.1:8765/analyze/stream</code></p>
+
+          <div id="drop-zone" class="drop-zone">
+            <div class="drop-content">
+              <span class="upload-icon">⇧</span>
+              <p class="drop-title">拖拽 PCAP 到这里</p>
+              <p class="drop-subtitle">或点击选择 .pcap / .pcapng / .cap 文件</p>
+            </div>
+            <input id="pcap-input" type="file" accept=".pcap,.pcapng,.cap" />
+          </div>
+
+          <div class="controls">
+            <span id="file-name" class="file-name">未选择文件</span>
+            <button id="analyze-btn" class="primary">开始分析</button>
+          </div>
+
+          <div class="status-card">
+            <h3>当前状态</h3>
+            <p id="status" class="status">等待选择 PCAP 文件。</p>
+          </div>
+        </section>
+
+        <aside class="analysis-column">
+          <section class="panel progress-panel">
+            <h2>执行进度</h2>
+            <ol id="steps" class="steps">
+              <li data-step="zeek"><span>日志解析</span></li>
+              <li data-step="rita"><span>规则引擎</span></li>
+              <li data-step="lstm"><span>LSTM 时序检测</span></li>
+              <li data-step="ai"><span>大模型研判</span></li>
+            </ol>
+          </section>
+
+          <section class="panel result-panel">
+            <h2>分析结果</h2>
+            <div id="result" class="result">完成分析后，Markdown 报告会显示在这里。</div>
+          </section>
+        </aside>
+      </div>
+    </section>
+
+    <section id="principle" class="tab-page" data-page="principle">
+      <div class="principle-layout">
+        <aside class="principle-nav">
+          <button class="principle-link active" data-target="p-motivation"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.6-.9 5-.6 8 1.2 3-1.8 5.4-2.1 8-1.2v13c-2.6-.9-5-.6-8 1.2-3-1.8-5.4-2.1-8-1.2z"/><path d="M12 6.7v13"/></svg></i><span>背景与动机</span><small>APT · Beacon · 挑战</small></button>
+          <button class="principle-link" data-target="p-limitations"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 22 20H2z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></i><span>现有方法的局限</span><small>规则 · 深度学习 · 可解释性</small></button>
+          <button class="principle-link" data-target="p-architecture"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></i><span>总体结构</span><small>解析 · 检测 · AI 研判</small></button>
+          <button class="principle-link" data-target="p-rule-engine"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h4l2-6 4 12 2-6h4"/><path d="M6 5v4"/><path d="M18 5v4"/></svg></i><span>规则引擎</span><small>统计评分 · 行为分析</small></button>
+          <button class="principle-link" data-target="p-lstm"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5a4 4 0 0 0-2 7.5A4 4 0 0 0 8 20"/><path d="M16 5a4 4 0 0 1 2 7.5A4 4 0 0 1 16 20"/><path d="M8 5v15"/><path d="M16 5v15"/><path d="M8 12h8"/><path d="M10 8h4"/><path d="M10 16h4"/></svg></i><span>LSTM 模型</span><small>时序学习 · Beacon 识别</small></button>
+          <button class="principle-link" data-target="p-findings"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-7"/><path d="M20 16v-3"/></svg></i><span>结果与发现</span><small>检测 · 分析 · 溯源</small></button>
+        </aside>
+        <div class="principle-content">
+          <article id="p-motivation" class="principle-section active">
+            <h2><span class="section-dot"></span>背景与动机</h2>
+            <p class="lead">随着 APT 攻击、勒索软件和僵尸网络不断演化，C2 通信已经从“明显异常外联”转向“伪装成正常业务流量”。攻击者可以隐藏域名、加密内容、降低通信频率，但仍然需要让受控主机与控制端保持联系，这使连接行为本身成为识别隐蔽威胁的关键入口。</p>
+            <p>在真实攻防场景中，C2 通信通常承担远程控制、任务下发、状态回传、横向移动协同和数据外传等功能。为了绕过边界设备和传统告警规则，攻击者往往将通信隐藏在 HTTPS、DNS、云服务 API 或周期性心跳连接之中，使单次请求看起来并不明显恶意。</p>
+            <p>这类通信未必产生大流量，也未必暴露明文 payload。即使通信内容完全加密，受害主机仍然会在连接时间、访问频率、数据大小、持续时间和外部目标稳定性上留下行为痕迹。C2Sherlock 的动机正是从这些“内容不可见但行为可度量”的元数据中发现异常规律，将海量流量转化为可排序、可解释、可溯源的安全线索。</p>
+            <div class="principle-grid four">
+              <div class="principle-card"><h3>隐蔽化</h3><p>C2 流量伪装为普通业务访问，单次连接不一定触发传统告警。</p></div>
+              <div class="principle-card"><h3>周期化</h3><p>受控主机持续向控制端发送 Beacon，用于状态同步与任务获取。</p></div>
+              <div class="principle-card"><h3>加密化</h3><p>HTTPS、TLS 和 DNS 隧道削弱内容检测效果，元数据更重要。</p></div>
+              <div class="principle-card"><h3>低频化</h3><p>攻击者可通过降低通信频率和加入抖动逃避简单周期检测。</p></div>
+            </div>
+          </article>
+
+          <article id="p-limitations" class="principle-section">
+            <h2><span class="section-dot"></span>现有方法的局限</h2>
+            <p class="lead">隐蔽 C2 检测的难点不在于“是否存在外联”，而在于如何从大量正常外联中识别真正具有控制通道特征的异常行为。传统方案往往依赖单一视角，难以同时兼顾覆盖面、复杂模式识别和结果可解释性。</p>
+            <div class="principle-grid three">
+              <div class="principle-card">
+                <h3>签名与情报依赖已知威胁</h3>
+                <p>黑名单、域名、URL 或 payload 签名对已知样本有效，但攻击者更换基础设施、使用新注册域名或将 C2 托管在常见云平台后，命中率会显著下降。</p>
+              </div>
+              <div class="principle-card">
+                <h3>单一统计规则容易被规避</h3>
+                <p>固定阈值和简单周期规则能发现明显 Beacon，但面对随机抖动、长休眠、低频心跳和模拟人工浏览节奏的 C2 通信时，容易出现漏报。</p>
+              </div>
+              <div class="principle-card">
+                <h3>纯深度模型缺少可解释链路</h3>
+                <p>模型能够学习复杂模式，但若只输出概率分数，分析师难以判断“为什么可疑”，也难以将模型结论转化为溯源方向和处置动作。</p>
+              </div>
+            </div>
+            <div class="solution-strip">
+              <div class="solution-panel">
+                <h3>我们需要的能力</h3>
+                <ul>
+                  <li>在无明文 payload 的情况下利用连接行为检测。</li>
+                  <li>同时识别明显周期 Beacon 和弱规则异常通信。</li>
+                  <li>输出可读证据链，而不是只给出一个黑盒分数。</li>
+                </ul>
+              </div>
+              <div class="solution-panel alt">
+                <h3>C2Sherlock 的应对思路</h3>
+                <ul>
+                  <li>规则引擎负责快速筛查可疑连接。</li>
+                  <li>LSTM 模型负责捕捉复杂时序模式。</li>
+                  <li>AI 研判模块负责融合结果并生成可解释报告。</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article id="p-architecture" class="principle-section">
+            <h2><span class="section-dot"></span>总体结构</h2>
+            <p>C2Sherlock 的分析流程从 PCAP 文件上传开始。系统首先将原始数据包解析为结构化网络日志，再按通信关系构建连接行为特征；随后通过规则引擎完成统计评分，利用 LSTM 模型进行时序异常识别，最后融合多源检测结果，生成自然语言研判报告。</p>
+            <div class="flow-wrap process-flow">
+              <div class="flow-heading">
+                <h3>C2Sherlock 系统处理流程</h3>
+                <p>多引擎串联分析，AI 融合研判，精准识别隐蔽 C2 通信</p>
+              </div>
+              <div class="flow">
+                <div class="flow-node"><span class="num">1</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l7 7v31H12z"/><path d="M29 5v8h7"/><path d="M17 28h14"/><path d="M17 34h14"/><path d="M17 22h9"/></svg></span><h3>数据输入</h3><p>上传 .pcap / .pcapng 文件，创建独立分析任务。</p></div>
+                <div class="flow-node"><span class="num">2</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 34h28"/><path d="M13 29c5-9 9 6 14-4 3-6 6-5 10-1"/><path d="M16 40h16"/><path d="M12 10h24v24H12z"/></svg></span><h3>流量解析</h3><p>解析协议与会话，生成 conn、dns、http、ssl 等日志。</p></div>
+                <div class="flow-node green"><span class="num">3</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 8h16a6 6 0 0 1 0 12H16a6 6 0 0 1 0-12z"/><path d="M10 20v14c0 3.3 6.3 6 14 6s14-2.7 14-6V20"/><path d="M24 27v10"/><path d="M15 35h6"/><path d="M27 35h6"/></svg></span><h3>特征构建</h3><p>按“内网主机—外部目标”聚合，提取连接行为特征。</p></div>
+                <div class="flow-node orange"><span class="num">4</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 7h18l5 5v29H13z"/><path d="M31 7v7h5"/><path d="m18 19 3 3 5-6"/><path d="M29 22h4"/><path d="m18 30 3 3 5-6"/><circle cx="34" cy="34" r="6"/><path d="m38 38 5 5"/></svg></span><h3>规则引擎</h3><p>基于时间、数据量、持续性和分布稳定性计算风险分。</p></div>
+                <div class="flow-node purple"><span class="num">5</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 8a8 8 0 0 0-4 15 8 8 0 0 0 4 17"/><path d="M30 8a8 8 0 0 1 4 15 8 8 0 0 1-4 17"/><path d="M18 8v32"/><path d="M30 8v32"/><circle cx="21" cy="17" r="2"/><circle cx="27" cy="24" r="2"/><circle cx="21" cy="31" r="2"/><path d="M21 17h6v7h-6v7h6"/></svg></span><h3>LSTM 检测</h3><p>学习复杂时序模式，输出 Beacon 概率与风险等级。</p></div>
+                <div class="flow-node green"><span class="num">6</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M15 12h10v10H15z"/><path d="M28 8h10v10H28z"/><path d="M27 28h10v10H27z"/><path d="M10 30h10v10H10z"/><path d="M25 17h3"/><path d="M20 30l7 3"/><path d="M33 18l-1 10"/></svg></span><h3>结果融合</h3><p>融合规则分数、模型概率、连接上下文与证据特征。</p></div>
+                <div class="flow-node"><span class="num">7</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l7 7v31H12z"/><path d="M29 5v8h7"/><path d="M18 35v-7"/><path d="M24 35V22"/><path d="M30 35v-10"/><path d="M17 16h12"/></svg></span><h3>AI 研判报告</h3><p>生成威胁概览、重点连接分析、溯源建议与处置建议。</p></div>
+              </div>
+              <div class="flow-feedback">结果反馈与模型 / 规则持续优化</div>
+            </div>
+          </article>
+
+          <article id="p-rule-engine" class="principle-section">
+            <h2><span class="section-dot"></span>规则引擎</h2>
+            <p class="lead">规则引擎承担第一层快速筛查任务。系统不直接依赖通信内容，而是以“内部主机—外部目标”为分析对象，聚合同一通信关系中的连接时间、数据量、持续时间和频率分布，判断其是否呈现 Beacon 式的自动化通信特征。</p>
+            <div class="rule-layout">
+              <div>
+                <div class="formula-cards">
+                  <div class="formula-card">
+                    <h3>时间间隔规律性</h3>
+                    <p>连接间隔越稳定，越像固定心跳通信。这里用变异系数衡量离散程度。</p>
+                    <div class="formula-line">CV<sub>interval</sub> = σ<sub>interval</sub> / μ<sub>interval</sub></div>
+                    <div class="formula-line">S<sub>time</sub> = 1 − min(CV<sub>interval</sub>, 1)</div>
+                  </div>
+                  <div class="formula-card">
+                    <h3>数据量稳定性</h3>
+                    <p>每次请求或响应数据规模越接近，说明通信模板化程度越高。</p>
+                    <div class="formula-line">CV<sub>size</sub> = σ<sub>size</sub> / μ<sub>size</sub></div>
+                    <div class="formula-line">S<sub>size</sub> = 1 − min(CV<sub>size</sub>, 1)</div>
+                  </div>
+                  <div class="formula-card">
+                    <h3>持续通信特征</h3>
+                    <p>长期持续存在的规律通信比短时突发连接更值得关注。</p>
+                    <div class="formula-line">S<sub>dur</sub> = min(T<sub>active</sub> / T<sub>obs</sub>, 1)</div>
+                    <p>T<sub>active</sub> 为活跃跨度，T<sub>obs</sub> 为观察窗口。</p>
+                  </div>
+                  <div class="formula-card">
+                    <h3>分布平稳性</h3>
+                    <p>将观察窗口切分为多个时间片，若各窗口连接次数稳定，则提高可疑度。</p>
+                    <div class="formula-line">CV<sub>freq</sub> = σ<sub>freq</sub> / μ<sub>freq</sub></div>
+                    <div class="formula-line">S<sub>dist</sub> = 1 − min(CV<sub>freq</sub>, 1)</div>
+                  </div>
+                </div>
+                <div class="score-card">
+                  <h3>综合风险评分</h3>
+                  <p>四类特征归一化后进行加权融合，得到 0–100 的规则风险分。本系统将四类子分按等权重处理，使不同类型的 Beacon 行为特征都能参与最终判断。</p>
+                  <div class="formula-line">Score = 100 × (0.25S<sub>time</sub> + 0.25S<sub>size</sub> + 0.25S<sub>dur</sub> + 0.25S<sub>dist</sub>)</div>
+                </div>
+              </div>
+              <div class="radar-card">
+                <h3>规则评分权重分布</h3>
+                <p>系统将四个行为评分维度进行等权融合。雷达图展示各维度在综合规则评分中的占比。</p>
+                <div class="radar-wrap">
+                  <svg viewBox="0 0 320 320" role="img" aria-label="规则评分权重分布雷达图">
+                    <defs>
+                      <linearGradient id="radarFill" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#10b981" stop-opacity="0.38"/>
+                        <stop offset="1" stop-color="#38bdf8" stop-opacity="0.30"/>
+                      </linearGradient>
+                    </defs>
+                    <g transform="translate(160 160)">
+                      <polygon points="0,-120 120,0 0,120 -120,0" fill="none" stroke="#dbe6e2" stroke-width="1.5"/>
+                      <polygon points="0,-90 90,0 0,90 -90,0" fill="none" stroke="#dbe6e2" stroke-width="1.5"/>
+                      <polygon points="0,-60 60,0 0,60 -60,0" fill="none" stroke="#dbe6e2" stroke-width="1.5"/>
+                      <polygon points="0,-30 30,0 0,30 -30,0" fill="none" stroke="#dbe6e2" stroke-width="1.5"/>
+                      <line x1="0" y1="-120" x2="0" y2="120" stroke="#dbe6e2"/>
+                      <line x1="-120" y1="0" x2="120" y2="0" stroke="#dbe6e2"/>
+                      <polygon points="0,-96 96,0 0,96 -96,0" fill="url(#radarFill)" stroke="#10b981" stroke-width="3"/>
+                      <circle cx="0" cy="-96" r="5" fill="#10b981"/>
+                      <circle cx="96" cy="0" r="5" fill="#10b981"/>
+                      <circle cx="0" cy="96" r="5" fill="#10b981"/>
+                      <circle cx="-96" cy="0" r="5" fill="#10b981"/>
+                      <text x="0" y="-136" text-anchor="middle" font-size="13" fill="#065f46" font-weight="700">时间规律性 25%</text>
+                      <text x="138" y="5" text-anchor="middle" font-size="13" fill="#065f46" font-weight="700">数据稳定性 25%</text>
+                      <text x="0" y="150" text-anchor="middle" font-size="13" fill="#065f46" font-weight="700">持续性 25%</text>
+                      <text x="-138" y="5" text-anchor="middle" font-size="13" fill="#065f46" font-weight="700">分布平稳性 25%</text>
+                    </g>
+                  </svg>
+                </div>
+                <div class="radar-legend">
+                  <div class="legend-item"><span>时间规律性</span><div class="legend-bar"><span style="width:25%"></span></div><b>0.25</b></div>
+                  <div class="legend-item"><span>数据量稳定性</span><div class="legend-bar"><span style="width:25%"></span></div><b>0.25</b></div>
+                  <div class="legend-item"><span>持续通信特征</span><div class="legend-bar"><span style="width:25%"></span></div><b>0.25</b></div>
+                  <div class="legend-item"><span>分布平稳性</span><div class="legend-bar"><span style="width:25%"></span></div><b>0.25</b></div>
+                </div>
+              </div>
+            </div>
+            <div class="risk-row">
+              <div class="risk r1">0–30<br>正常通信</div>
+              <div class="risk r2">30–60<br>低风险</div>
+              <div class="risk r3">60–80<br>中高风险</div>
+              <div class="risk r4">80–100<br>高风险 Beacon 候选</div>
+            </div>
+          </article>
+
+          <article id="p-lstm" class="principle-section">
+            <h2><span class="section-dot"></span>LSTM 模型</h2>
+            <p class="lead">LSTM 模型用于补充规则引擎在复杂场景下的检测能力。相比固定规则，深度学习模型能够从多维连接特征中学习正常流量与 Beacon 流量之间更隐蔽的差异，尤其适用于存在随机抖动、低频心跳或弱周期特征的通信场景。</p>
+            <div class="lstm-layout">
+              <div class="principle-card">
+                <h3>模型结构：三层 Bi-LSTM</h3>
+                <div class="model-arch">
+                  <div class="layer arrow">输入特征序列：T × 22</div>
+                  <div class="layer arrow">Bi-LSTM Layer 1<br><small>hidden = 128</small></div>
+                  <div class="layer arrow">Dropout 0.3</div>
+                  <div class="layer arrow">Bi-LSTM Layer 2<br><small>hidden = 64</small></div>
+                  <div class="layer arrow">Dropout 0.3</div>
+                  <div class="layer arrow">Bi-LSTM Layer 3<br><small>hidden = 32</small></div>
+                  <div class="layer arrow">Dense + ReLU</div>
+                  <div class="layer">Sigmoid 输出 Beacon 概率</div>
+                </div>
+              </div>
+              <div class="lstm-right">
+                <div class="principle-card wide">
+                  <h3>训练数据</h3>
+                  <p>模型训练数据来源于 ARES 2025 artifacts 中公开的网络流量数据。该数据目录同时包含 PCAP 与作者生成的 CSV 文件，其中以 benign 开头的文件标注为正常流量，以 cs 开头的文件与恶意流量相关，可标注为 Cobalt Strike / Malicious。</p>
+                  <p>系统在此基础上完成协议解析、流级聚合、缺失值处理、异常值修正和标准化，从八十余项统计字段中筛选出 22 个与 Beacon 检测相关的连接行为特征。</p>
+                </div>
+                <div class="lstm-bottom">
+                  <div class="principle-card">
+                    <h3>数据集划分</h3>
+                    <p>采用分层随机抽样，保持正常样本与恶意样本在各子集中的比例一致。</p>
+                    <table class="mini-table">
+                      <thead><tr><th>数据集</th><th>比例</th><th>用途</th></tr></thead>
+                      <tbody>
+                        <tr><td>训练集</td><td>70%</td><td>学习模型参数</td></tr>
+                        <tr><td>验证集</td><td>15%</td><td>调参与早停</td></tr>
+                        <tr><td>测试集</td><td>15%</td><td>独立评估</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="principle-card">
+                    <h3>训练设置</h3>
+                    <ul>
+                      <li>损失函数：Binary Cross Entropy</li>
+                      <li>优化器：Adam，学习率动态调整</li>
+                      <li>正则化：Dropout + Early Stopping</li>
+                      <li>标准化：StandardScaler 统一特征尺度</li>
+                    </ul>
+                  </div>
+                  <div class="principle-card">
+                    <h3>自适应序列策略</h3>
+                    <p>系统会根据输入数据的记录形态自动组织模型输入：同一通信关系包含连续观测记录时，模型按时间顺序利用前后行为变化；记录较少时，则综合已有统计字段补足行为描述。</p>
+                  </div>
+                  <div class="principle-card">
+                    <h3>输出与风险等级</h3>
+                    <p>模型对每条连接输出 0–1 的 Beacon 概率，并与规则评分融合后形成综合风险等级。</p>
+                    <table class="mini-table">
+                      <tbody>
+                        <tr><td>0–0.25</td><td>Low</td></tr>
+                        <tr><td>0.25–0.50</td><td>Medium</td></tr>
+                        <tr><td>0.50–0.75</td><td>High</td></tr>
+                        <tr><td>0.75–1.00</td><td>Critical</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article id="p-findings" class="principle-section">
+            <h2><span class="section-dot"></span>结果与发现</h2>
+            <p>C2Sherlock 的核心发现是：隐蔽 C2 通信即使隐藏了内容，也很难完全隐藏行为。周期性连接、稳定数据量、长期持续访问和低流行度外部目标，往往会共同构成可疑信号。</p>
+            <div class="findings">
+              <div class="finding"><strong>发现一：行为比内容更稳定</strong><p>即使 payload 被加密，连接时间、访问频率和通信持续性仍然能够反映 C2 行为特征。</p></div>
+              <div class="finding"><strong>发现二：多引擎互补更可靠</strong><p>规则引擎适合快速筛查明显 Beacon，LSTM 模型适合捕捉复杂、弱规则的时序异常。</p></div>
+              <div class="finding"><strong>发现三：可解释报告降低研判成本</strong><p>AI 研判将规则分数、模型概率和连接上下文转化为安全分析师可直接阅读的结论。</p></div>
+            </div>
+            <p class="note">系统最终形成“检测 → 分析 → 研判 → 建议”的闭环，不仅告诉用户哪些连接可疑，也解释为什么可疑，以及后续应从哪些方向开展溯源。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="capability" class="tab-page" data-page="capability">
+      <div class="section-heading page-heading">
+        <p class="eyebrow">Capability</p>
+        <h1>能力展示</h1>
+        <p>系统优势、历史样例表格和案例解释。</p>
+      </div>
+
+      <div class="advantage-grid">
+        <article class="feature-card">
+          <h3>多源证据融合</h3>
+          <p>相比单一规则，系统综合时间规律、流量统计、模型概率和语义研判，降低误报。</p>
+        </article>
+        <article class="feature-card">
+          <h3>面向分析师输出</h3>
+          <p>不只返回风险分数，还提供可读解释、溯源线索和处置建议，便于比赛展示与复核。</p>
+        </article>
+        <article class="feature-card">
+          <h3>部署灵活</h3>
+          <p>前端可调用本机、虚拟机或同学电脑后端，适合现场演示和多人协作调试。</p>
+        </article>
+      </div>
+
+      <section class="panel">
+        <div class="panel-title compact">
+          <h2>案例库 / 历史样例展示</h2>
+          <p>当前为 mock 数据，后续可替换为真实后端分析记录。</p>
+        </div>
+        <div class="table-wrap">
+          <table class="case-table">
+            <thead>
+              <tr>
+                <th>序号</th>
+                <th>PCAP 包名称</th>
+                <th>源 IP</th>
+                <th>目标 IP/域名</th>
+                <th>时间</th>
+                <th>状态</th>
+                <th>简要说明</th>
+              </tr>
+            </thead>
+            <tbody id="case-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title compact">
+          <h2>案例解释</h2>
+          <p>以大模型报告风格展示正常样例与恶意样例的差异。</p>
+        </div>
+        <div class="case-compare">
+          <article class="explain-card benign">
+            <span>正常样例</span>
+            <h3>CDN / 软件更新访问</h3>
+            <p>该流量主要表现为浏览器或客户端访问 CDN 节点，连接目标常见，数据量与时间间隔存在自然波动。虽然可能出现短时间重复请求，但周期性弱、目标信誉较高，综合风险低。</p>
+          </article>
+          <article class="explain-card malicious">
+            <span>恶意样例</span>
+            <h3>周期性 Beacon 与异常目标</h3>
+            <p>样例中主机持续访问低信誉目标，连接间隔稳定，部分请求数据量高度接近，并伴随长连接或异常 DNS 行为。系统将其归为高风险外联，建议隔离主机、封禁目标并保留 PCAP 与日志证据。</p>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <section id="team" class="tab-page" data-page="team">
+      <div class="team-hero">
+        <div>
+          <div class="team-kickers">
+            <p class="eyebrow hero-badge">Team</p>
+            <p class="eyebrow hero-badge school-badge">华中科技大学网络空间安全学院</p>
+          </div>
+          <h1>四头八臂队</h1>
+          <p class="subtitle">
+            四头八臂队来自华中科技大学网络空间安全学院，由张乾坤副教授指导。我们由四位女生组成，专注于网络对抗与 AI 安全交叉方向。
+            针对传统检测手段难以捕获隐蔽 C2 信道的痛点，团队提出 C2Sherlock 系统：借助大模型的语义理解与行为推理能力，
+            从海量流量中发现暗藏的“隐形指挥链”。我们兼具逻辑缜密性与技术韧性，致力于打造有温度、有精度、有深度的下一代安全检测体系。
+          </p>
+        </div>
+        <div class="team-stats" aria-label="团队关键词">
+          <span>Network Defense</span>
+          <span>AI Security</span>
+          <span>C2 Detection</span>
+          <span>Forensics</span>
+        </div>
+      </div>
+
+      <div class="team-grid">
+        <article class="member-card lead-member">
+          <span class="member-avatar">王</span>
+          <div>
+            <p class="member-role">队长 · 2023级本科生</p>
+            <h2>王羽飞</h2>
+            <p>系统总体设计 · LSTM 时序检测模型 · 技术文档</p>
+          </div>
+        </article>
+        <article class="member-card">
+          <span class="member-avatar">袁</span>
+          <div>
+            <p class="member-role">队员 · 2023级本科生</p>
+            <h2>袁佳纯</h2>
+            <p>系统方案设计 · 实现原理 · 技术文档</p>
+          </div>
+        </article>
+        <article class="member-card">
+          <span class="member-avatar">石</span>
+          <div>
+            <p class="member-role">队员 · 2023级本科生</p>
+            <h2>石钰婷</h2>
+            <p>前端开发 · 交互设计 · 数据可视化</p>
+          </div>
+        </article>
+        <article class="member-card">
+          <span class="member-avatar">周</span>
+          <div>
+            <p class="member-role">队员 · 2023级本科生</p>
+            <h2>周诗嘉</h2>
+            <p>规则检测引擎 · 攻击溯源 · 后端部署</p>
+          </div>
+        </article>
+      </div>
     </section>
   </main>
 
