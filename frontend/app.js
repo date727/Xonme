@@ -8,12 +8,24 @@ const defaultApiBase =
     ? "http://127.0.0.1:8765"
     : `${window.location.protocol}//${window.location.hostname}:8765`;
 
+const normalizeMarkdown = (value) => {
+  let text = typeof value === "string" ? value : String(value ?? "");
+  text = text.replace(/\r\n/g, "\n");
+  if (text.includes("\\n") && !text.includes("\n")) {
+    text = text.replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\t/g, "\t");
+  }
+  const fenced = text.trim().match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i);
+  if (fenced) text = fenced[1];
+  return text.trim();
+};
+
 // Safe markdown renderer — falls back to plain-text <pre> when marked is unavailable
 const renderMarkdown = (text) => {
+  const normalized = normalizeMarkdown(text);
   if (typeof marked !== "undefined" && typeof marked.parse === "function") {
-    return marked.parse(text);
+    return marked.parse(normalized);
   }
-  const escaped = text
+  const escaped = normalized
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
@@ -37,6 +49,7 @@ const currentEndpoint = $("#current-endpoint");
 const caseTableBody = $("#case-table-body");
 const reportFormat = $("#report-format");
 const downloadReportBtn = $("#download-report-btn");
+const printReportBtn = $("#print-report-btn");
 
 let selectedFile = null;
 let analysisRunning = false;
@@ -68,6 +81,7 @@ const setStatus = (message, isError = false) => {
 
 const setReportDownloadEnabled = (enabled) => {
   if (downloadReportBtn) downloadReportBtn.disabled = !enabled;
+  if (printReportBtn) printReportBtn.disabled = !enabled;
 };
 
 const setRunControls = (running) => {
@@ -142,6 +156,100 @@ const downloadBlob = (blob, filename) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+const markdownToPlainText = (markdown) =>
+  normalizeMarkdown(markdown)
+    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[a-zA-Z0-9_-]*/g, "").replace(/```/g, ""))
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[>*+-]\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+const toUtf16Hex = (text) =>
+  Array.from(text)
+    .map((char) => {
+      const code = char.codePointAt(0);
+      if (code > 0xffff) {
+        const high = Math.floor((code - 0x10000) / 0x400) + 0xd800;
+        const low = ((code - 0x10000) % 0x400) + 0xdc00;
+        return [high, low].map((item) => item.toString(16).padStart(4, "0")).join("");
+      }
+      return code.toString(16).padStart(4, "0");
+    })
+    .join("");
+
+const wrapText = (text, maxChars = 48) => {
+  const lines = [];
+  text.split("\n").forEach((paragraph) => {
+    const source = paragraph.trimEnd();
+    if (!source) {
+      lines.push("");
+      return;
+    }
+    let line = "";
+    source.split(/(\s+)/).forEach((part) => {
+      if (!part) return;
+      if ((line + part).length > maxChars && line.trim()) {
+        lines.push(line.trimEnd());
+        line = part.trimStart();
+      } else {
+        line += part;
+      }
+      while (line.length > maxChars) {
+        lines.push(line.slice(0, maxChars));
+        line = line.slice(maxChars);
+      }
+    });
+    if (line.trim()) lines.push(line.trimEnd());
+  });
+  return lines;
+};
+
+const createPdfBlob = (markdown) => {
+  const lines = wrapText(`C2Sherlock Analysis Report\n\n${markdownToPlainText(markdown)}`);
+  const pages = [];
+  const linesPerPage = 36;
+  for (let index = 0; index < lines.length; index += linesPerPage) {
+    pages.push(lines.slice(index, index + linesPerPage));
+  }
+
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    `<< /Type /Pages /Kids [${pages.map((_, index) => `${3 + index * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`,
+  ];
+
+  pages.forEach((pageLines, index) => {
+    const pageObject = 3 + index * 2;
+    const contentObject = pageObject + 1;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${3 + pages.length * 2} 0 R >> >> /Contents ${contentObject} 0 R >>`);
+    const textOps = pageLines
+      .map((line, lineIndex) => `1 0 0 1 50 ${790 - lineIndex * 20} Tm <${toUtf16Hex(line)}> Tj`)
+      .join("\n");
+    const stream = `BT\n/F1 11 Tf\n${textOps}\nET`;
+    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+
+  objects.push("<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [ << /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor << /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >> >> ] >>");
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+};
+
 const createReportHtml = () => `<!doctype html>
 <html>
 <head>
@@ -162,10 +270,10 @@ const createReportHtml = () => `<!doctype html>
 </body>
 </html>`;
 
-const exportPdf = () => {
+const printReport = () => {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    setStatus("浏览器拦截了 PDF 导出窗口，请允许弹窗后重试。", true);
+    setStatus("浏览器拦截了打印窗口，请允许弹窗后重试。", true);
     return;
   }
   printWindow.document.open();
@@ -196,7 +304,7 @@ const downloadReport = () => {
     return;
   }
 
-  exportPdf();
+  downloadBlob(createPdfBlob(latestReportMarkdown), `${baseName}.pdf`);
 };
 
 const cancelAnalysis = () => {
@@ -307,7 +415,7 @@ const handleStreamEvent = (eventName, data) => {
 
   if (eventName === "result") {
     const payload = JSON.parse(data);
-    const markdown = payload.analysis_markdown || "后端未返回分析报告。";
+    const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
     latestReportMarkdown = markdown;
     resultEl.innerHTML = renderMarkdown(markdown);
     setReportDownloadEnabled(true);
@@ -486,3 +594,4 @@ renderCaseTable();
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
 cancelBtn?.addEventListener("click", cancelAnalysis);
 downloadReportBtn?.addEventListener("click", downloadReport);
+printReportBtn?.addEventListener("click", printReport);

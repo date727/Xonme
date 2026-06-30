@@ -849,7 +849,8 @@ code {
 }
 
 .report-actions select,
-.report-download {
+.report-download,
+.report-print {
   height: 32px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -873,7 +874,21 @@ code {
   cursor: pointer;
 }
 
-.report-download:disabled {
+.report-print {
+  padding: 0 10px;
+  color: #334155;
+  background: #fff;
+  cursor: pointer;
+}
+
+.report-print:hover:not(:disabled) {
+  border-color: #a7f3d0;
+  color: #065f46;
+  background: #f0fdf4;
+}
+
+.report-download:disabled,
+.report-print:disabled {
   color: #94a3b8;
   border-color: var(--line);
   background: #f8fafc;
