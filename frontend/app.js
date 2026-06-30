@@ -27,6 +27,7 @@ const dropZone = $("#drop-zone");
 const pcapInput = $("#pcap-input");
 const fileName = $("#file-name");
 const analyzeBtn = $("#analyze-btn");
+const cancelBtn = $("#cancel-btn");
 const statusEl = $("#status");
 const resultEl = $("#result");
 const stepsEl = $("#steps");
@@ -41,6 +42,7 @@ let selectedFile = null;
 let analysisRunning = false;
 let currentStep = null;
 let latestReportMarkdown = "";
+let activeController = null;
 
 const stepOrder = ["zeek", "rita", "lstm", "ai"];
 const stepLabels = {
@@ -66,6 +68,11 @@ const setStatus = (message, isError = false) => {
 
 const setReportDownloadEnabled = (enabled) => {
   if (downloadReportBtn) downloadReportBtn.disabled = !enabled;
+};
+
+const setRunControls = (running) => {
+  analyzeBtn.disabled = running;
+  if (cancelBtn) cancelBtn.disabled = !running;
 };
 
 const resetSteps = () => {
@@ -103,6 +110,13 @@ const markError = (step) => {
     item.classList.remove("active", "done");
     item.classList.add("error");
   }
+};
+
+const clearActiveStep = () => {
+  stepOrder.forEach((step) => {
+    const item = stepsEl.querySelector(`[data-step="${step}"]`);
+    if (item) item.classList.remove("active", "error");
+  });
 };
 
 const setFile = (file) => {
@@ -183,6 +197,13 @@ const downloadReport = () => {
   }
 
   exportPdf();
+};
+
+const cancelAnalysis = () => {
+  if (!analysisRunning || !activeController) return;
+  setStatus("正在取消当前分析...");
+  cancelBtn.disabled = true;
+  activeController.abort();
 };
 
 const preventDefaults = (event) => {
@@ -330,7 +351,8 @@ const analyzeSelectedFile = async () => {
   }
 
   analysisRunning = true;
-  analyzeBtn.disabled = true;
+  activeController = new AbortController();
+  setRunControls(true);
   currentStep = null;
   window.localStorage.setItem(STORAGE_KEYS.apiBase, apiBase);
   window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
@@ -350,6 +372,7 @@ const analyzeSelectedFile = async () => {
     const response = await fetch(`${apiBase}/analyze/stream`, {
       method: "POST",
       body: formData,
+      signal: activeController.signal,
     });
 
     if (!response.ok) {
@@ -377,6 +400,14 @@ const analyzeSelectedFile = async () => {
       processSseBuffer(streamState);
     }
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      latestReportMarkdown = "";
+      setReportDownloadEnabled(false);
+      resultEl.textContent = "分析已取消。可以重新选择 PCAP 文件并开始新的分析。";
+      setStatus("当前分析已取消，可以重新选择文件。");
+      clearActiveStep();
+      return;
+    }
     const message = error instanceof Error ? error.message : "分析请求失败";
     latestReportMarkdown = "";
     setReportDownloadEnabled(false);
@@ -385,7 +416,8 @@ const analyzeSelectedFile = async () => {
     markError(currentStep);
   } finally {
     analysisRunning = false;
-    analyzeBtn.disabled = false;
+    activeController = null;
+    setRunControls(false);
   }
 };
 
@@ -452,4 +484,5 @@ setupApiConfig();
 setupUpload();
 renderCaseTable();
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
+cancelBtn?.addEventListener("click", cancelAnalysis);
 downloadReportBtn?.addEventListener("click", downloadReport);

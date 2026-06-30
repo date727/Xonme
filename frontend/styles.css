@@ -494,11 +494,14 @@ p {
 }
 
 .panel {
+  min-width: 0;
   padding: clamp(22px, 2.4vw, 28px);
 }
 
 .control-panel,
-.analysis-column {
+.analysis-column,
+.progress-panel,
+.result-panel {
   min-width: 0;
 }
 
@@ -682,6 +685,41 @@ code {
   margin-top: 10px;
 }
 
+.run-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: #475569;
+  background: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: #fecdd3;
+  color: #be123c;
+  background: #fff1f2;
+  transform: translateY(-1px);
+}
+
+.secondary:disabled {
+  color: #94a3b8;
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
 .status-card {
   margin-top: 12px;
   padding: 12px;
@@ -707,6 +745,7 @@ code {
 .steps {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
   gap: 8px;
   margin: 12px 0 0;
   padding: 0;
@@ -717,6 +756,7 @@ code {
   position: relative;
   display: flex;
   align-items: center;
+  min-width: 0;
   min-height: 56px;
   padding: 11px 12px 11px 46px;
   border: 1px solid var(--line);
@@ -728,7 +768,9 @@ code {
 
 .steps li span {
   display: block;
+  min-width: 0;
   line-height: 1.28;
+  overflow-wrap: anywhere;
 }
 
 .steps li::before {
@@ -782,17 +824,20 @@ code {
   max-height: 360px;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .result-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   gap: 12px;
   margin-bottom: 6px;
 }
 
 .result-head h2 {
+  min-width: 0;
   margin: 0;
 }
 
@@ -838,9 +883,11 @@ code {
 .result {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   height: 100%;
   max-height: 100%;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   margin-top: 6px;
   padding: 14px;
   border: 1px dashed var(--line);
@@ -850,6 +897,24 @@ code {
   word-wrap: break-word;
   overflow-wrap: anywhere;
   background: #fff;
+}
+
+.result > * {
+  max-width: 100%;
+}
+
+.result p,
+.result li,
+.result h1,
+.result h2,
+.result h3,
+.result h4,
+.result h5,
+.result h6,
+.result td,
+.result th {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .progress-panel h2,
@@ -871,9 +936,10 @@ code {
 }
 
 .result table {
-  display: block;
+  display: table;
+  width: 100%;
   max-width: 100%;
-  overflow-x: auto;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -882,7 +948,7 @@ code {
   padding: 8px 10px;
   border: 1px solid var(--line);
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .result th {
@@ -891,10 +957,17 @@ code {
 
 .result pre {
   max-width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
   padding: 12px 14px;
   border-radius: 10px;
   background: #f8fafc;
+}
+
+.result code {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .principle-layout {
