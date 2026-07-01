@@ -481,25 +481,23 @@ class ZeekLogExtractor:
 
 
 class ThreatFeatureExtractor:
-    """威胁特征提取器 - 整合 RITA 和 Zeek 数据"""
+    """威胁特征提取器 - 从 RITA CSV 提取威胁特征"""
     
-    def __init__(self, rita_csv: str, zeek_log_dir: Path):
+    def __init__(self, rita_csv: str):
         """
         初始化提取器
         
         Args:
             rita_csv: RITA CSV 文本
-            zeek_log_dir: Zeek 日志目录
         """
         self.rita_extractor = RITADataExtractor(rita_csv)
-        self.zeek_extractor = ZeekLogExtractor(zeek_log_dir)
     
     def extract_all(self) -> list[dict]:
         """
         提取所有威胁特征
         
         Returns:
-            特征列表，每个元素包含 RITA 检测 + Zeek 详情
+            特征列表（纯 RITA 检测结果，不包含 Zeek 详情）
         """
         # 提取 RITA 高危连接
         high_risk = self.rita_extractor.extract_high_risk()
@@ -508,48 +506,26 @@ class ThreatFeatureExtractor:
             print("⚠ 没有检测到高危连接")
             return []
         
-        # 解析 Zeek 日志
-        self.zeek_extractor.parse_all()
-        
-        # 整合数据
-        threat_features = []
-        
-        for conn in high_risk:
-            # 获取 Zeek 详情
-            zeek_details = self.zeek_extractor.get_connection_details(
-                conn["src_ip"],
-                conn["dst_ip"]
-            )
-            
-            # 合并特征
-            feature = {
-                **conn,  # RITA 数据
-                **zeek_details,  # Zeek 数据
-            }
-            
-            threat_features.append(feature)
-        
-        print(f"✓ 提取了 {len(threat_features)} 个完整威胁特征")
-        return threat_features
+        print(f"✓ 提取了 {len(high_risk)} 个完整威胁特征")
+        return high_risk
 
 
 def main():
     """测试脚本"""
     import sys
     
-    if len(sys.argv) < 3:
-        print("Usage: python data_extractor.py <rita_csv_file> <zeek_log_dir>")
+    if len(sys.argv) < 2:
+        print("Usage: python data_extractor.py <rita_csv_file>")
         sys.exit(1)
     
     rita_csv_path = Path(sys.argv[1])
-    zeek_log_dir = Path(sys.argv[2])
     
     # 读取 RITA CSV
     with open(rita_csv_path, "r", encoding="utf-8") as f:
         rita_csv = f.read()
     
     # 提取特征
-    extractor = ThreatFeatureExtractor(rita_csv, zeek_log_dir)
+    extractor = ThreatFeatureExtractor(rita_csv)
     features = extractor.extract_all()
     
     # 显示前 3 个特征
@@ -559,9 +535,8 @@ def main():
         print(f"  源 IP: {feature['src_ip']} → 目标 IP: {feature['dst_ip']}:{feature['dst_port']}")
         print(f"  Beacon 评分: {feature['beacon_score']:.1f}/100")
         print(f"  威胁级别: {feature['threat_category']}")
-        print(f"  连接次数: {feature['conn_count']}, 平均间隔: {feature['avg_interval']:.1f}s")
-        print(f"  TLS JA3: {feature['tls_ja3'][:20]}...")
-        print(f"  DNS 查询: {', '.join(feature['dns_queries'][:3])}")
+        if 'detection_sources' in feature:
+            print(f"  检测来源: {', '.join(feature['detection_sources'])}")
 
 
 if __name__ == "__main__":

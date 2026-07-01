@@ -1,6 +1,8 @@
 """
 特征编码器
-将 RITA 检测结果和 Zeek 日志转换为自然语言描述，用于 RAG 检索
+将 RITA 和 LSTM 检测结果转换为自然语言描述，用于 RAG 检索
+
+注意：当前版本只使用 RITA 和 LSTM 的检测结果，不包含 Zeek 原始日志的详细信息。
 """
 
 
@@ -9,7 +11,7 @@ def encode_threat_signal(feature: dict) -> str:
     将威胁特征编码为自然语言描述
     
     Args:
-        feature: 威胁特征字典（包含 RITA + Zeek 数据）
+        feature: 威胁特征字典（包含 RITA + LSTM 检测结果）
     
     Returns:
         自然语言描述文本

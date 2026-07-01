@@ -290,19 +290,18 @@ def main():
     """测试脚本"""
     import sys
     
-    if len(sys.argv) < 3:
-        print("Usage: python rag_engine.py <rita_csv_file> <zeek_log_dir>")
+    if len(sys.argv) < 2:
+        print("Usage: python rag_engine.py <rita_csv_file>")
         sys.exit(1)
     
     rita_csv_path = Path(sys.argv[1])
-    zeek_log_dir = Path(sys.argv[2])
     
     # 1. 提取威胁特征
     print("=== 步骤 1: 提取威胁特征 ===")
     with open(rita_csv_path, "r", encoding="utf-8") as f:
         rita_csv = f.read()
     
-    extractor = ThreatFeatureExtractor(rita_csv, zeek_log_dir)
+    extractor = ThreatFeatureExtractor(rita_csv)
     features = extractor.extract_all()
     
     if not features:

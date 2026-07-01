@@ -17,8 +17,6 @@ if str(_sys_path_root) not in sys.path:
 # LSTM beacon detection — gracefully degrades if dependencies are missing
 try:
     from app.lstm_predictor import predict_beacons, format_for_prompt as _fmt_lstm
-    from app.rita_feature_exporter import export_lstm_feature_csv_from_rita_db
-
     _LSTM_AVAILABLE = True
 except ImportError:
     _LSTM_AVAILABLE = False
@@ -138,26 +136,6 @@ def run_zeek(pcap_path: str, output_dir: Path) -> None:
     run_command(
         ["zeek", "readpcap", pcap_path, str(output_dir)],
     )
-
-
-def extract_threat_features(csv_text: str, output_dir: Path) -> list[dict]:
-    """
-    从 RITA CSV 和 Zeek 日志中提取威胁特征
-    
-    Args:
-        csv_text: RITA CSV 输出
-        output_dir: Zeek 日志目录
-    
-    Returns:
-        威胁特征列表
-    """
-    try:
-        from app.data_extractor import ThreatFeatureExtractor
-        extractor = ThreatFeatureExtractor(csv_text, output_dir)
-        return extractor.extract_all()
-    except Exception as e:
-        print(f"⚠ 威胁特征提取失败: {e}")
-        return []
 
 
 def generate_ai_analysis(
@@ -305,48 +283,67 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     csv_path = OUTPUTS_DIR / f"{name}.csv"
     csv_path.write_text(csv_text, encoding="utf-8")
 
-    # LSTM requires iat_oresp_* feature columns; try exporting from RITA DB first.
+    # LSTM 独立分析：直接从 Zeek conn.log 提取全部连接（与 RITA 并行）
     lstm_results = None
-    if _LSTM_AVAILABLE and rita_ok:
-        lstm_csv_text = csv_text
+    if _LSTM_AVAILABLE:
         try:
-            exported = export_lstm_feature_csv_from_rita_db(rita_db_name)
-            if exported.strip():
-                lstm_csv_text = exported
-                print("✓ LSTM: using RITA DB feature export (iat_oresp_*)")
+            from app.zeek_to_lstm_converter import export_lstm_features_from_zeek
+            print("🔍 LSTM: extracting features from Zeek conn.log (ALL connections, independent of RITA)")
+            lstm_csv_text = export_lstm_features_from_zeek(output_dir)
+            
+            if lstm_csv_text:
+                print("✓ LSTM: feature extraction complete, running beacon detection...")
+                lstm_results = predict_beacons(lstm_csv_text)
             else:
-                print("⚠ LSTM: empty RITA DB feature export, fallback to RITA view output")
+                print("⏭ LSTM: skipped (no connections found in conn.log)")
         except Exception as e:
-            print(f"⚠ LSTM: feature export failed, fallback to RITA view output — {e}")
-        lstm_results = predict_beacons(lstm_csv_text)
+            print(f"⚠ LSTM: analysis failed — {e}")
+            import traceback
+            traceback.print_exc()
 
-    # RAG attribution
+    # RAG 威胁溯源：使用合并后的威胁特征
     rag_context = None
     if not _RAG_AVAILABLE:
         print("⏭ RAG: skipped (dependencies not installed)")
-    elif not rita_ok:
-        print("⏭ RAG: skipped (RITA unavailable)")
     else:
         try:
-            print("🔍 RAG: extracting threat features...")
-            extractor = ThreatFeatureExtractor(csv_text, output_dir)
-            features = extractor.extract_all()
-            print(f"🔍 RAG: extracted {len(features)} threat feature(s)")
-
-            if not features:
-                print("⏭ RAG: no high-risk threats found, skipping attribution")
-            else:
-                print("🔍 RAG: searching knowledge base...")
-                rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
-                rag_result = rag_engine.attribute_single_threat(features[0])
-
-                if rag_result["candidates"]:
-                    primary = rag_result["primary_candidate"]
-                    print(f"✓ RAG: matched! primary={primary['name']}, "
-                          f"confidence={rag_result['confidence']:.1f}%")
-                    rag_context = rag_engine.generate_attribution_report(rag_result)
+            # 检查是否有威胁需要归因
+            if (lstm_results and lstm_results.get('total_flagged', 0) > 0) or (rita_ok):
+                from app.threat_feature_merger import merge_threat_features
+                
+                # 步骤 1: 提取 RITA 特征
+                rita_features = []
+                if rita_ok:
+                    print("🔍 RAG: extracting RITA threat features...")
+                    extractor = ThreatFeatureExtractor(csv_text)
+                    rita_features = extractor.extract_all()
+                    print(f"🔍 RAG: extracted {len(rita_features)} RITA threat(s)")
                 else:
-                    print("⚠ RAG: no matching APT group found")
+                    print("⏭ RAG: RITA unavailable, using LSTM-only features")
+                
+                # 步骤 2: 合并 RITA 和 LSTM 的结果
+                print("🔄 RAG: merging RITA and LSTM detection results...")
+                merged_features = merge_threat_features(rita_features, lstm_results)
+                
+                if not merged_features:
+                    print("⏭ RAG: no threats found after merging, skipping attribution")
+                else:
+                    print(f"🔍 RAG: merged features ready, searching knowledge base...")
+                    rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
+                    
+                    # 使用置信度最高的威胁进行归因
+                    rag_result = rag_engine.attribute_single_threat(merged_features[0])
+                    
+                    if rag_result["candidates"]:
+                        primary = rag_result["primary_candidate"]
+                        print(f"✓ RAG: matched! primary={primary['name']}, "
+                              f"confidence={rag_result['confidence']:.1f}%")
+                        rag_context = rag_engine.generate_attribution_report(rag_result)
+                    else:
+                        print("⚠ RAG: no matching APT group found in knowledge base")
+            else:
+                print("⏭ RAG: no threats detected by RITA or LSTM, skipping attribution")
+                
         except Exception as e:
             print(f"❌ RAG: failed — {e}")
             import traceback
@@ -428,52 +425,70 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
             csv_path = OUTPUTS_DIR / f"{name}.csv"
             csv_path.write_text(csv_text, encoding="utf-8")
 
-            # LSTM requires iat_oresp_* feature columns; try exporting from RITA DB first.
+            # LSTM 独立分析：直接从 Zeek conn.log 提取全部连接（与 RITA 并行）
             yield sse_event("step", "lstm")
             lstm_results = None
-            if _LSTM_AVAILABLE and rita_ok:
-                lstm_csv_text = csv_text
+            if _LSTM_AVAILABLE:
                 try:
-                    exported = export_lstm_feature_csv_from_rita_db(rita_db_name)
-                    if exported.strip():
-                        lstm_csv_text = exported
-                        print("✓ LSTM: using RITA DB feature export (iat_oresp_*)")
+                    from app.zeek_to_lstm_converter import export_lstm_features_from_zeek
+                    print("🔍 LSTM: extracting features from Zeek conn.log (ALL connections, independent of RITA)")
+                    lstm_csv_text = export_lstm_features_from_zeek(output_dir)
+                    
+                    if lstm_csv_text:
+                        print("✓ LSTM: feature extraction complete, running beacon detection...")
+                        lstm_results = predict_beacons(lstm_csv_text)
                     else:
-                        print("⚠ LSTM: empty RITA DB feature export, fallback to RITA view output")
+                        print("⏭ LSTM: skipped (no connections found in conn.log)")
                 except Exception as e:
-                    print(f"⚠ LSTM: feature export failed, fallback to RITA view output — {e}")
-                lstm_results = predict_beacons(lstm_csv_text)
+                    print(f"⚠ LSTM: analysis failed — {e}")
+                    import traceback
+                    traceback.print_exc()
 
-            # RAG attribution — search MITRE ATT&CK knowledge base for matching APT groups
+            # RAG 威胁溯源：整合 RITA 和 LSTM 的检测结果
             yield sse_event("step", "rag")
             rag_context = None
             if not _RAG_AVAILABLE:
                 print("⏭ RAG: skipped (dependencies not installed: chromadb or sentence-transformers)")
-            elif not rita_ok:
-                print("⏭ RAG: skipped (RITA unavailable, no CSV data to extract features from)")
             else:
                 try:
-                    print("🔍 RAG: extracting threat features from RITA CSV + Zeek logs...")
-                    extractor = ThreatFeatureExtractor(csv_text, output_dir)
-                    features = extractor.extract_all()
-                    print(f"🔍 RAG: extracted {len(features)} threat feature(s)")
-
-                    if not features:
-                        print("⏭ RAG: no high-risk threats found, skipping attribution")
+                    # 步骤 1: 提取 RITA 特征
+                    rita_features = []
+                    if rita_ok:
+                        print("🔍 RAG: extracting RITA threat features from RITA CSV...")
+                        extractor = ThreatFeatureExtractor(csv_text)
+                        rita_features = extractor.extract_all()
+                        print(f"🔍 RAG: extracted {len(rita_features)} RITA threat(s)")
                     else:
-                        print("🔍 RAG: initializing knowledge base + embedding model...")
-                        rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
-                        print(f"🔍 RAG: searching for matching APT groups (top-{rag_engine.top_k})...")
-                        rag_result = rag_engine.attribute_single_threat(features[0])
-
-                        if rag_result["candidates"]:
-                            primary = rag_result["primary_candidate"]
-                            print(f"✓ RAG: matched! primary={primary['name']}, "
-                                  f"confidence={rag_result['confidence']:.1f}%, "
-                                  f"candidates={len(rag_result['candidates'])}")
-                            rag_context = rag_engine.generate_attribution_report(rag_result)
+                        print("⏭ RAG: RITA unavailable, using LSTM-only features")
+                    
+                    # 步骤 2: 合并 RITA 和 LSTM 的结果
+                    if rita_features or (lstm_results and lstm_results.get('total_flagged', 0) > 0):
+                        from app.threat_feature_merger import merge_threat_features
+                        print("🔄 RAG: merging RITA and LSTM detection results...")
+                        merged_features = merge_threat_features(rita_features, lstm_results)
+                        
+                        if not merged_features:
+                            print("⏭ RAG: no threats found after merging, skipping attribution")
                         else:
-                            print("⚠ RAG: no matching APT group found in knowledge base")
+                            print(f"🔍 RAG: merged features ready ({len(merged_features)} unique threats)")
+                            print("🔍 RAG: initializing knowledge base + embedding model...")
+                            rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
+                            print(f"🔍 RAG: searching for matching APT groups (top-{rag_engine.top_k})...")
+                            
+                            # 使用置信度最高的威胁进行归因
+                            rag_result = rag_engine.attribute_single_threat(merged_features[0])
+                            
+                            if rag_result["candidates"]:
+                                primary = rag_result["primary_candidate"]
+                                print(f"✓ RAG: matched! primary={primary['name']}, "
+                                      f"confidence={rag_result['confidence']:.1f}%, "
+                                      f"candidates={len(rag_result['candidates'])}")
+                                rag_context = rag_engine.generate_attribution_report(rag_result)
+                            else:
+                                print("⚠ RAG: no matching APT group found in knowledge base")
+                    else:
+                        print("⏭ RAG: no threats detected by RITA or LSTM, skipping attribution")
+                        
                 except Exception as e:
                     print(f"❌ RAG: failed — {e}")
                     import traceback

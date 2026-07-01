@@ -6,34 +6,57 @@ C2Sherlock 是一个集成了多层检测技术的网络威胁分析平台，专
 
 ```mermaid
 graph TB
-    A[📦 上传 PCAP 文件] --> B{开始分析}
+    A[📦 PCAP 文件] --> B[🔍 Zeek 网络流量解析]
     
-    B --> C[🔍 Zeek 网络流量解析]
-    C --> C1[生成协议日志<br/>conn.log, dns.log<br/>http.log, ssl.log]
+    B --> C1[conn.log]
+    B --> C2[dns.log]
+    B --> C3[http.log]
+    B --> C4[ssl.log]
     
-    C1 --> D[📊 RITA 威胁分析]
-    D --> D1[Beacon Score<br/>Long Connection<br/>C2 Over DNS]
+    C1 --> D[📊 RITA 分析引擎]
+    C2 --> D
+    C3 --> D
+    C4 --> D
     
-    D1 --> E[🧠 LSTM 深度学习检测]
-    E --> E1[时序特征提取<br/>IAT 模式分析<br/>置信度评分]
+    C1 --> E[🧠 LSTM 检测引擎]
     
-    D1 --> F[🎯 RAG 威胁溯源]
-    F --> F1[提取威胁特征<br/>检索 ATT&CK 知识库<br/>匹配 APT 组织]
+    D --> D1[RITA 检测结果<br/>Beacon Score<br/>可疑连接列表]
     
-    E1 --> G[🤖 AI 综合分析]
-    F1 --> G
-    D1 --> G
+    E --> E1[LSTM 检测结果<br/>Beacon 列表<br/>置信度评分]
     
-    G --> H[📄 生成威胁报告]
-    H --> I[Executive Summary<br/>Key Threats<br/>Risk Assessment<br/>APT Attribution<br/>Recommended Actions]
+    D1 --> F[🔄 威胁特征合并器<br/>纯检测结果合并]
+    E1 --> F
+    
+    F --> F1[合并威胁列表<br/>RITA ∪ LSTM<br/>去重 + 特征增强]
+    
+    F1 --> G[🎯 RAG 威胁溯源<br/>基于检测结果<br/>无需原始日志]
+    
+    G --> G1[APT 组织匹配<br/>MITRE ATT&CK 技术<br/>归因置信度]
+    
+    D1 --> H[🤖 AI 综合分析]
+    E1 --> H
+    G1 --> H
+    
+    H --> I[📄 威胁报告]
     
     style A fill:#e3f2fd
-    style C fill:#f3e5f5
+    style B fill:#f3e5f5
+    style C1 fill:#fff9c4
+    style C2 fill:#fff9c4
+    style C3 fill:#fff9c4
+    style C4 fill:#fff9c4
     style D fill:#e8f5e9
     style E fill:#fce4ec
-    style F fill:#fff3e0
-    style G fill:#e0f2f1
-    style H fill:#f1
+    style F fill:#ffebee
+    style G fill:#fff3e0
+    style H fill:#e0f2f1
+    style I fill:#f1f8e9
+    
+    classDef independent stroke:#4caf50,stroke-width:3px
+    class D,E independent
+    
+    classDef noZeek stroke:#2196f3,stroke-width:3px,stroke-dasharray: 5 5
+    class F,G noZeek
 ```
 
 ## 核心功能
