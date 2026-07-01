@@ -9,6 +9,12 @@
   --line-strong: #a8f0d1;
   --green: #14bf82;
   --green-dark: #087a5c;
+  --primary: var(--green);
+  --accent: #35d9be;
+  --accent-cyan: #49d7e8;
+  --accent-blue: #60a5fa;
+  --surface: var(--panel);
+  --border: var(--line);
   --mint: #ecfdf5;
   --cyan: #e0f7fa;
   --blue: #dbeafe;
@@ -306,78 +312,181 @@ p {
 
 .hero-board {
   align-self: center;
-  padding: 24px 22px;
+  padding: clamp(14px, 2.4vw, 24px);
 }
 
-.board-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--line);
-}
-
-.board-head span {
-  color: var(--green-dark);
-  font-weight: 700;
-}
-
-.board-head strong {
-  display: block;
-  margin-top: 8px;
-  color: var(--ink);
-  font-size: 22px;
-  line-height: 1.25;
-  font-weight: 760;
-}
-
-.board-shield {
+.hero-graphic-card {
+  position: relative;
   display: grid;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 auto;
+  width: min(100%, 520px);
+  min-height: clamp(320px, 34vw, 420px);
   place-items: center;
-  border-radius: 13px;
-  color: var(--green-dark);
-  background: var(--mint);
-  font-size: 24px;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(236, 253, 245, 0.64)),
+    radial-gradient(circle at 28% 74%, rgba(20, 191, 130, 0.12), transparent 30%),
+    radial-gradient(circle at 78% 24%, rgba(73, 215, 232, 0.16), transparent 32%),
+    var(--surface);
+  backdrop-filter: blur(16px);
 }
 
-.pipeline-mini {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
+.hero-graphic-card::before {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border: 1px solid rgba(168, 240, 209, 0.42);
+  border-radius: calc(var(--radius) - 4px);
+  pointer-events: none;
 }
 
-.pipeline-mini span {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 50px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
-  color: #334155;
-  font-weight: 650;
+.hero-graphic-orbit {
+  position: absolute;
+  width: 66%;
+  aspect-ratio: 1;
+  border: 1px solid rgba(20, 191, 130, 0.13);
+  border-radius: 50%;
+  transform: rotate(-18deg) scaleX(1.3);
 }
 
-.pipeline-mini span::before {
-  content: none;
+.hero-graphic-orbit::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border: 1px dashed rgba(73, 215, 232, 0.16);
+  border-radius: inherit;
 }
 
-.pipeline-mini b {
-  display: inline-grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 9px;
-  color: #fff;
-  background: var(--green);
-  font-size: 13px;
+.hero-pipeline-graphic {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 520px);
+  height: auto;
+  aspect-ratio: 1.4 / 1;
+  overflow: visible;
+  opacity: 0;
+  animation: graphicFadeIn 0.8s ease-out 0.1s forwards;
+}
+
+.graphic-grid path {
+  fill: none;
+  stroke: rgba(15, 23, 42, 0.05);
+  stroke-width: 1;
+}
+
+.flow-paths use {
+  fill: none;
+  stroke: rgba(8, 122, 92, 0.18);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.flow-paths-active use {
+  stroke: url(#flowGradient);
+  stroke-width: 2.6;
+  stroke-dasharray: 16 24;
+  stroke-dashoffset: 0;
+  animation: flowDash 7.5s linear infinite;
+}
+
+.flow-particles circle {
+  fill: var(--green);
+  filter: url(#softGlow);
+  opacity: 0.9;
+}
+
+.flow-label rect {
+  fill: rgba(255, 255, 255, 0.78);
+  stroke: rgba(20, 191, 130, 0.24);
+  stroke-width: 1;
+  backdrop-filter: blur(8px);
+}
+
+.flow-label text {
+  fill: rgba(8, 122, 92, 0.78);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.16em;
+  text-anchor: middle;
+}
+
+.node-mini rect,
+.engine-node rect {
+  fill: url(#nodeGradient);
+  stroke: rgba(20, 191, 130, 0.34);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 12px 18px rgba(15, 23, 42, 0.08));
+  animation: nodeBreath 6.8s ease-in-out infinite;
+}
+
+.node-mini path,
+.engine-node path,
+.engine-node circle,
+.report-node path {
+  fill: none;
+  stroke: #0f3b34;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.engine-node circle {
+  fill: var(--green);
+  stroke: none;
+}
+
+.node-mini text,
+.engine-node text,
+.report-node text {
+  fill: rgba(51, 65, 85, 0.68);
+  font-size: 10px;
   font-weight: 760;
+  letter-spacing: 0.16em;
+  text-anchor: middle;
+}
+
+.node-rule rect {
+  animation-delay: 0.8s;
+}
+
+.node-lstm rect {
+  animation-delay: 1.6s;
+}
+
+.fusion-halo {
+  fill: rgba(20, 191, 130, 0.10);
+  stroke: rgba(20, 191, 130, 0.20);
+  stroke-width: 1;
+  animation: fusionPulse 4.8s ease-in-out infinite;
+}
+
+.fusion-core {
+  fill: rgba(236, 253, 245, 0.98);
+  stroke: rgba(20, 191, 130, 0.58);
+  stroke-width: 1.8;
+  filter: url(#softGlow);
+}
+
+.fusion-node path {
+  fill: none;
+  stroke: #065f46;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fusion-node circle:not(.fusion-halo):not(.fusion-core) {
+  fill: var(--green);
+}
+
+.report-node path:first-child {
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: rgba(96, 165, 250, 0.42);
+  filter: drop-shadow(0 12px 20px rgba(37, 99, 235, 0.08));
+  animation: nodeBreath 7.4s ease-in-out 2.2s infinite;
+}
+
+.report-node path:not(:first-child) {
+  stroke: #1e3a5f;
 }
 
 .board-note {
@@ -1994,6 +2103,47 @@ code {
   }
 }
 
+@keyframes graphicFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes flowDash {
+  to {
+    stroke-dashoffset: -80;
+  }
+}
+
+@keyframes nodeBreath {
+  0%,
+  100% {
+    stroke-opacity: 0.38;
+    filter: drop-shadow(0 10px 16px rgba(15, 23, 42, 0.07));
+  }
+  50% {
+    stroke-opacity: 0.76;
+    filter: drop-shadow(0 14px 22px rgba(20, 191, 130, 0.16));
+  }
+}
+
+@keyframes fusionPulse {
+  0%,
+  100% {
+    opacity: 0.54;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.12);
+  }
+}
+
 @media (max-width: 980px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -2077,6 +2227,12 @@ code {
     padding: 24px;
   }
 
+  .hero-graphic-card {
+    width: 100%;
+    min-height: 300px;
+    padding: 12px;
+  }
+
   .hero h1,
   .page-heading h1,
   .team-hero h1 {
@@ -2136,5 +2292,29 @@ code {
   .result-panel {
     height: 380px;
     min-height: 380px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-pipeline-graphic,
+  .flow-paths-active use,
+  .flow-particles circle,
+  .node-mini rect,
+  .engine-node rect,
+  .fusion-halo,
+  .report-node path:first-child {
+    animation: none;
+  }
+
+  .hero-pipeline-graphic {
+    opacity: 1;
+  }
+
+  .flow-particles {
+    display: none;
+  }
+
+  .fusion-halo {
+    opacity: 0.5;
   }
 }

@@ -39,21 +39,134 @@
             <button class="ghost" data-tab="principle">查看原理</button>
           </div>
         </div>
-        <div class="hero-board" aria-label="分析流程概览">
-          <div class="board-head">
-            <div>
-              <span>Analysis Pipeline</span>
-              <strong>多引擎串行 + AI 融合研判</strong>
-            </div>
-            <span class="board-shield">◇</span>
-          </div>
-          <div class="pipeline-mini">
-            <span><b>1</b>PCAP</span>
-            <span><b>2</b>日志解析</span>
-            <span><b>3</b>规则引擎</span>
-            <span><b>4</b>LSTM 风险分数</span>
-            <span><b>5</b>大模型研判报告</span>
-          </div>
+        <div class="hero-board hero-graphic-card" aria-label="多引擎串行与 AI 融合研判动态图">
+          <div class="hero-graphic-orbit" aria-hidden="true"></div>
+          <svg class="hero-pipeline-graphic" viewBox="0 0 560 400" role="img" aria-labelledby="hero-graphic-title hero-graphic-desc">
+            <title id="hero-graphic-title">C2Sherlock multi-engine analysis flow</title>
+            <desc id="hero-graphic-desc">PCAP data flows through log parsing, rule engine, and LSTM score nodes, converges at an AI fusion hub, then outputs an analysis report.</desc>
+            <defs>
+              <linearGradient id="flowGradient" x1="40" y1="340" x2="488" y2="78" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="var(--accent-cyan)" stop-opacity="0.38" />
+                <stop offset="0.45" stop-color="var(--green)" stop-opacity="0.86" />
+                <stop offset="1" stop-color="var(--accent-blue)" stop-opacity="0.54" />
+              </linearGradient>
+              <linearGradient id="nodeGradient" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.98" />
+                <stop offset="1" stop-color="var(--mint)" stop-opacity="0.94" />
+              </linearGradient>
+              <filter id="softGlow" x="-45%" y="-45%" width="190%" height="190%">
+                <feGaussianBlur stdDeviation="8" result="blur" />
+                <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.05 0 0 0 0 0.75 0 0 0 0 0.55 0 0 0 .35 0" result="glow" />
+                <feMerge>
+                  <feMergeNode in="glow" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+              <path id="pcapToLog" d="M58 318 C104 302 120 270 158 244" />
+              <path id="logToRule" d="M178 228 C210 214 222 190 250 170" />
+              <path id="ruleToAi" d="M274 164 C314 150 330 176 352 194" />
+              <path id="logToLstm" d="M170 244 C226 272 274 292 332 274" />
+              <path id="lstmToAi" d="M360 260 C374 238 370 218 356 198" />
+              <path id="aiToReport" d="M386 174 C418 130 454 100 500 78" />
+            </defs>
+
+            <g class="graphic-grid">
+              <path d="M70 72 H492 M70 146 H492 M70 220 H492 M70 294 H492" />
+              <path d="M112 52 V340 M218 52 V340 M324 52 V340 M430 52 V340" />
+            </g>
+
+            <g class="flow-paths">
+              <use href="#pcapToLog" />
+              <use href="#logToRule" />
+              <use href="#ruleToAi" />
+              <use href="#logToLstm" />
+              <use href="#lstmToAi" />
+              <use href="#aiToReport" />
+            </g>
+            <g class="flow-paths flow-paths-active">
+              <use href="#pcapToLog" />
+              <use href="#logToRule" />
+              <use href="#ruleToAi" />
+              <use href="#logToLstm" />
+              <use href="#lstmToAi" />
+              <use href="#aiToReport" />
+            </g>
+
+            <g class="flow-labels" aria-hidden="true">
+              <g class="flow-label" transform="translate(104 284)">
+                <rect x="-22" y="-11" width="44" height="22" rx="11" />
+                <text y="4">ZEEK</text>
+              </g>
+              <g class="flow-label" transform="translate(214 198)">
+                <rect x="-21" y="-11" width="42" height="22" rx="11" />
+                <text y="4">RITA</text>
+              </g>
+              <g class="flow-label" transform="translate(248 270)">
+                <rect x="-24" y="-11" width="48" height="22" rx="11" />
+                <text y="4">LSTM</text>
+              </g>
+              <g class="flow-label" transform="translate(425 178)">
+                <rect x="-18" y="-11" width="36" height="22" rx="11" />
+                <text y="4">LLM</text>
+              </g>
+            </g>
+
+            <g class="flow-particles">
+              <circle r="4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="0s"><mpath href="#pcapToLog" /></animateMotion></circle>
+              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="1s"><mpath href="#logToRule" /></animateMotion></circle>
+              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="2.1s"><mpath href="#ruleToAi" /></animateMotion></circle>
+              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="1.45s"><mpath href="#logToLstm" /></animateMotion></circle>
+              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="2.6s"><mpath href="#lstmToAi" /></animateMotion></circle>
+              <circle r="4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="3.35s"><mpath href="#aiToReport" /></animateMotion></circle>
+            </g>
+
+            <g class="data-source node-mini" transform="translate(58 318)">
+              <title>PCAP</title>
+              <rect x="-34" y="-20" width="68" height="40" rx="14" />
+              <path d="M-16 -6 H8 L18 4 V14 H-16 Z M8 -6 V4 H18" />
+              <text x="0" y="34">PCAP</text>
+            </g>
+
+            <g class="engine-node node-log" transform="translate(166 238)">
+              <title>Log Parse</title>
+              <rect x="-38" y="-28" width="76" height="56" rx="18" />
+              <circle cx="-14" cy="-6" r="4" />
+              <path d="M0 -12 H18 M0 0 H18 M-18 12 H18" />
+              <text x="0" y="45">LOG</text>
+            </g>
+
+            <g class="engine-node node-rule" transform="translate(260 166)">
+              <title>Rule Engine</title>
+              <rect x="-42" y="-30" width="84" height="60" rx="18" />
+              <path d="M-16 -6 L-6 4 L16 -16 M-16 14 H18" />
+              <text x="0" y="48">RULE</text>
+            </g>
+
+            <g class="engine-node node-lstm" transform="translate(350 268)">
+              <title>LSTM Score</title>
+              <rect x="-42" y="-30" width="84" height="60" rx="18" />
+              <path d="M-20 12 C-10 -16 2 18 18 -12" />
+              <circle cx="22" cy="-16" r="3.4" />
+              <text x="0" y="48">SCORE</text>
+            </g>
+
+            <g class="fusion-node" transform="translate(366 188)">
+              <title>AI Fusion</title>
+              <circle class="fusion-halo" r="58" />
+              <circle class="fusion-core" r="38" />
+              <path d="M-14 -4 C-8 -18 10 -18 16 -4 C24 -2 24 12 14 16 H-16 C-26 14 -26 -1 -14 -4Z" />
+              <circle cx="-11" cy="3" r="3" />
+              <circle cx="11" cy="3" r="3" />
+              <path d="M-8 13 H8" />
+            </g>
+
+            <g class="report-node" transform="translate(504 76)">
+              <title>AI Report</title>
+              <path d="M0 -34 L34 0 L0 34 L-34 0 Z" />
+              <path d="M-12 -10 H10 M-12 2 H14 M-12 14 H6" />
+              <text x="0" y="52">REPORT</text>
+            </g>
+          </svg>
         </div>
       </div>
 
