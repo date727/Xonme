@@ -239,7 +239,16 @@ def _extract_features(csv_text: str) -> Optional[tuple[np.ndarray, list[dict]]]:
     feature_cols: list[str] = _metadata["feature_cols"]
     seq_len: int = _metadata["seq_length"]
 
-    reader = csv.DictReader(io.StringIO(csv_text))
+    raw_lines = csv_text.splitlines()
+    start_idx = 0
+    for i, line in enumerate(raw_lines):
+        stripped = line.strip()
+        if stripped and "," in stripped:
+            start_idx = i
+            break
+    cleaned_csv_text = "\n".join(ln for ln in raw_lines[start_idx:] if ln.strip())
+
+    reader = csv.DictReader(io.StringIO(cleaned_csv_text))
     rows = list(reader)
 
     if not rows:
@@ -247,28 +256,52 @@ def _extract_features(csv_text: str) -> Optional[tuple[np.ndarray, list[dict]]]:
         return None
 
     # Verify all 15 feature columns are present
-    available = [c for c in feature_cols if c in reader.fieldnames]
+    fieldnames = reader.fieldnames or []
+    available = [c for c in feature_cols if c in fieldnames]
     if len(available) != len(feature_cols):
-        missing = set(feature_cols) - set(reader.fieldnames)
-        logger.warning(
-            "RITA CSV missing %d/%d feature columns: %s — skipping LSTM",
-            len(missing),
-            len(feature_cols),
-            missing,
+        missing = set(feature_cols) - set(fieldnames)
+        # Heuristic: RITA summary output (Severity/Beacon Score/Source IP...) is
+        # valid for RAG, but not the feature-matrix schema required by this LSTM.
+        looks_like_rita_summary = any(
+            name in fieldnames
+            for name in ["Severity", "Beacon Score", "Source IP", "Destination IP"]
         )
+        if looks_like_rita_summary:
+            logger.info(
+                "Skipping LSTM: received RITA summary CSV (no iat_oresp_* model features). "
+                "This is expected unless a model-feature export is provided."
+            )
+        else:
+            logger.warning(
+                "RITA CSV missing %d/%d feature columns: %s — skipping LSTM",
+                len(missing),
+                len(feature_cols),
+                missing,
+            )
         return None
 
     # Detect connection-grouping keys
     possible_keys = ["src", "dst", "proto", "port", "uid", "id_orig_h", "id_resp_h"]
-    group_keys = [k for k in possible_keys if k in reader.fieldnames]
+    group_keys = [k for k in possible_keys if k in fieldnames]
 
     # Decide strategy: time-series vs singleton
     if group_keys and len(rows) > len(
         set(tuple(r.get(k, "") for k in group_keys) for r in rows)
     ):
-        return _build_sequences_from_timeseries(rows, group_keys, feature_cols, seq_len)
-    else:
-        return _build_sequences_from_singletons(rows, feature_cols, seq_len)
+        sequences, conn_info = _build_sequences_from_timeseries(
+            rows, group_keys, feature_cols, seq_len
+        )
+        # Some datasets have one row per connection and cannot form seq_len windows.
+        # Fall back to singleton expansion so inference can still proceed.
+        if sequences.size == 0:
+            logger.info(
+                "No time-series windows built (seq_len=%d); falling back to singleton mode",
+                seq_len,
+            )
+            return _build_sequences_from_singletons(rows, feature_cols, seq_len)
+        return sequences, conn_info
+
+    return _build_sequences_from_singletons(rows, feature_cols, seq_len)
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +350,10 @@ def predict_beacons(csv_text: str, threshold: float = 0.5) -> Optional[dict]:
         return None
 
     sequences, conn_info = extracted  # (N, seq_len, 15)  and  list[dict]
+    if sequences.ndim != 3 or sequences.shape[0] == 0:
+        logger.info("No valid LSTM sequences after feature extraction — skipping prediction")
+        return None
+
     N, T, F = sequences.shape
 
     # --- Scale features ---

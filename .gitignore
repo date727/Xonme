@@ -4,5 +4,7 @@ __pycache__/
 backend/.env
 backend/uploads/
 backend/outputs/
+backend/chroma_db
+backend/local_models
 *.csv
 .DS_Store
