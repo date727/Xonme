@@ -43,10 +43,10 @@ class RITADataExtractor:
         "high": 1000
     }
     
-    # 提取高危连接的最低阈值（使用 "medium" 级别）
-    MIN_BEACON_SCORE = BEACON_THRESHOLDS["medium"]  # 90
-    MIN_LONG_CONN_DURATION = LONG_CONN_THRESHOLDS["medium"]  # 8 小时
-    MIN_C2_DNS_SUBDOMAIN_COUNT = C2_DNS_THRESHOLDS["medium"]  # 800
+    # 提取高危连接的最低阈值（使用 "low" 级别以提高检测灵敏度）
+    MIN_BEACON_SCORE = BEACON_THRESHOLDS["low"]  # 70 (降低以捕获更多威胁)
+    MIN_LONG_CONN_DURATION = LONG_CONN_THRESHOLDS["low"]  # 4 小时
+    MIN_C2_DNS_SUBDOMAIN_COUNT = C2_DNS_THRESHOLDS["low"]  # 500
     
     def __init__(self, csv_text: str):
         """
@@ -142,15 +142,50 @@ class RITADataExtractor:
             else:
                 c2_dns_value = c2_dns_score
             
+            # 调试：打印每条记录的评分
+            src_ip = self._pick(row, "src", "src_ip", "source", "source_ip") or "unknown"
+            dst_ip = self._pick(row, "dst", "dst_ip", "destination", "destination_ip") or "unknown"
+            print(f"  📊 [{src_ip} → {dst_ip}] "
+                  f"severity={severity or 'none'}, "
+                  f"beacon={beacon_score:.1f}, "
+                  f"long_conn={long_conn_value:.1f}, "
+                  f"c2_dns={c2_dns_value:.1f}, "
+                  f"c2_dns_score_raw={c2_dns_score:.3f}, "
+                  f"subdomain_count={subdomain_count:.0f}")
+            
             # 判断是否为高危（满足任一条件）
             is_high_risk = (
                 severity in {"high", "medium"} or
                 beacon_score >= self.MIN_BEACON_SCORE or
                 long_conn_value >= self.MIN_LONG_CONN_DURATION or
-                c2_dns_value >= self.MIN_C2_DNS_SUBDOMAIN_COUNT
+                c2_dns_value >= self.MIN_C2_DNS_SUBDOMAIN_COUNT or
+                # 新增：任何 beacon_score > 0 的都视为潜在威胁
+                (beacon_score > 0 and beacon_score >= self.BEACON_THRESHOLDS["base"]) or
+                # 新增：任何 c2_dns_score > 0.5 的都视为潜在 DGA
+                (c2_dns_score > 0 and c2_dns_score >= 0.5) or
+                # 新增：subdomain_count 超过基线的也算
+                (subdomain_count > 0 and subdomain_count >= self.C2_DNS_THRESHOLDS["base"])
             )
             
             if is_high_risk:
+                # 调试：说明触发原因
+                reasons = []
+                if severity in {"high", "medium"}:
+                    reasons.append(f"severity={severity}")
+                if beacon_score >= self.MIN_BEACON_SCORE:
+                    reasons.append(f"beacon≥{self.MIN_BEACON_SCORE}")
+                if long_conn_value >= self.MIN_LONG_CONN_DURATION:
+                    reasons.append(f"long_conn≥{self.MIN_LONG_CONN_DURATION}")
+                if c2_dns_value >= self.MIN_C2_DNS_SUBDOMAIN_COUNT:
+                    reasons.append(f"c2_dns≥{self.MIN_C2_DNS_SUBDOMAIN_COUNT}")
+                if beacon_score > 0 and beacon_score >= self.BEACON_THRESHOLDS["base"]:
+                    reasons.append(f"beacon≥base({self.BEACON_THRESHOLDS['base']})")
+                if c2_dns_score > 0 and c2_dns_score >= 0.5:
+                    reasons.append(f"c2_dns_score≥0.5")
+                if subdomain_count > 0 and subdomain_count >= self.C2_DNS_THRESHOLDS["base"]:
+                    reasons.append(f"subdomain≥{self.C2_DNS_THRESHOLDS['base']}")
+                print(f"    ✓ 标记为高危: {', '.join(reasons)}")
+                
                 port_proto_service = self._pick(row, "port_proto_service") or ""
                 dst_port = (
                     self._pick(row, "dst_port", "port")

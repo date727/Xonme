@@ -204,9 +204,18 @@ def generate_ai_analysis(
         )
 
     # Augment with LSTM results
+    lstm_markdown = ""
     if lstm_results and lstm_results.get("total_flagged", 0) > 0:
-        prompt += _fmt_lstm(lstm_results) + "\n\n---\n\n"
-
+        lstm_markdown = _fmt_lstm(lstm_results)
+        prompt += lstm_markdown + "\n\n---\n\n"
+        print("=" * 80)
+        print("📊 LSTM Beacon Detection Results (inserted into LLM prompt):")
+        print("=" * 80)
+        print(lstm_markdown)
+        print("=" * 80)
+    elif lstm_results and lstm_results.get("total_flagged", 0) == 0:
+        print("✓ LSTM: analyzed but found no beacons")
+    
     prompt += csv_text
 
     payload = {
