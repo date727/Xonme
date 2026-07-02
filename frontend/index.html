@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C2Sherlock 可视化分析平台</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260702" />
 </head>
 <body>
   <header class="topbar">
@@ -129,40 +129,40 @@
             </g>
 
             <g class="feature-fuse-node" transform="translate(368 224)">
-              <polygon points="0,-36 32,-18 32,18 0,36 -32,18 -32,-18" />
-              <circle class="fuse-ring" r="25" />
-              <path d="M-18 -10 C-7 -10 -8 0 0 0 M-18 10 C-7 10 -8 0 0 0 M18 0 H0" />
-              <circle cx="-19" cy="-10" r="3.2" />
-              <circle cx="-19" cy="10" r="3.2" />
-              <circle cx="19" cy="0" r="3.2" />
-              <text x="0" y="54">FUSE</text>
+              <polygon points="0,-36 32,-18 32,18 0,36 -32,18 -32,-18" fill="#ecfdf5" stroke="rgba(20, 191, 130, 0.44)" stroke-width="1.5" />
+              <circle class="fuse-ring" r="25" fill="rgba(20, 191, 130, 0.06)" stroke="rgba(20, 191, 130, 0.28)" stroke-width="1.4" />
+              <path d="M-18 -10 C-7 -10 -8 0 0 0 M-18 10 C-7 10 -8 0 0 0 M18 0 H0" fill="none" stroke="#0f3b34" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              <circle cx="-19" cy="-10" r="3.2" fill="#14bf82" />
+              <circle cx="-19" cy="10" r="3.2" fill="#14bf82" />
+              <circle cx="19" cy="0" r="3.2" fill="#14bf82" />
+              <text x="0" y="54" fill="rgba(51, 65, 85, 0.68)" text-anchor="middle">FUSE</text>
             </g>
 
             <g class="rag-node" transform="translate(437 224)">
-              <circle class="rag-scan" r="29" />
-              <circle class="rag-core" r="23" />
-              <path d="M-16 0 A16 16 0 1 0 16 0 A16 16 0 1 0 -16 0" />
-              <path d="M-23 0 H23 M0 -23 V23 M-10 -10 L-19 -19 M10 10 L19 19" />
-              <circle cx="0" cy="0" r="4" />
-              <circle cx="-18" cy="-18" r="3" />
-              <circle cx="18" cy="18" r="3" />
-              <text x="0" y="54">RAG</text>
+              <circle class="rag-scan" r="29" fill="none" stroke="rgba(73, 215, 232, 0.34)" stroke-width="1.2" stroke-dasharray="6 9" />
+              <circle class="rag-core" r="23" fill="#f0fdfa" stroke="rgba(56, 189, 248, 0.38)" stroke-width="1.5" />
+              <path d="M-16 0 A16 16 0 1 0 16 0 A16 16 0 1 0 -16 0" fill="none" stroke="#0f3b34" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M-23 0 H23 M0 -23 V23 M-10 -10 L-19 -19 M10 10 L19 19" fill="none" stroke="#0f3b34" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              <circle cx="0" cy="0" r="4" fill="#14bf82" />
+              <circle cx="-18" cy="-18" r="3" fill="#14bf82" />
+              <circle cx="18" cy="18" r="3" fill="#14bf82" />
+              <text x="0" y="54" fill="rgba(51, 65, 85, 0.68)" text-anchor="middle">RAG</text>
             </g>
 
             <g class="fusion-node ai-node" transform="translate(520 224)">
-              <circle class="fusion-halo" r="39" />
-              <circle class="fusion-core" r="31" />
-              <path d="M-14 -4 C-8 -18 10 -18 16 -4 C24 -2 24 12 14 16 H-16 C-26 14 -26 -1 -14 -4Z" />
-              <circle cx="-11" cy="3" r="3" />
-              <circle cx="11" cy="3" r="3" />
-              <path d="M-8 13 H8" />
-              <text x="0" y="58">AI</text>
+              <circle class="fusion-halo" r="39" fill="rgba(20, 191, 130, 0.10)" stroke="rgba(20, 191, 130, 0.20)" stroke-width="1" />
+              <circle class="fusion-core" r="31" fill="rgba(236, 253, 245, 0.98)" stroke="rgba(20, 191, 130, 0.58)" stroke-width="1.8" />
+              <path d="M-14 -4 C-8 -18 10 -18 16 -4 C24 -2 24 12 14 16 H-16 C-26 14 -26 -1 -14 -4Z" fill="none" stroke="#065f46" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+              <circle cx="-11" cy="3" r="3" fill="#14bf82" />
+              <circle cx="11" cy="3" r="3" fill="#14bf82" />
+              <path d="M-8 13 H8" fill="none" stroke="#065f46" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" />
+              <text x="0" y="58" fill="rgba(8, 122, 92, 0.74)" text-anchor="middle">AI</text>
             </g>
 
             <g class="report-node" transform="translate(520 68)">
-              <path d="M0 -34 L34 0 L0 34 L-34 0 Z" />
-              <path d="M-12 -10 H10 M-12 2 H14 M-12 14 H6" />
-              <text x="0" y="52">REPORT</text>
+              <path d="M0 -34 L34 0 L0 34 L-34 0 Z" fill="rgba(255, 255, 255, 0.92)" stroke="rgba(96, 165, 250, 0.42)" stroke-width="1.5" />
+              <path d="M-12 -10 H10 M-12 2 H14 M-12 14 H6" fill="none" stroke="#1e3a5f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+              <text x="0" y="52" fill="rgba(51, 65, 85, 0.68)" text-anchor="middle">REPORT</text>
             </g>
           </svg>
         </div>
@@ -265,6 +265,7 @@
               <li data-step="zeek"><span>日志解析</span></li>
               <li data-step="rita"><span>规则引擎</span></li>
               <li data-step="lstm"><span>LSTM 时序检测</span></li>
+              <li data-step="rag"><span>RAG 溯源归因</span></li>
               <li data-step="ai"><span>大模型研判</span></li>
             </ol>
           </section>
@@ -296,6 +297,7 @@
           <button class="principle-link" data-target="p-architecture"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></i><span>总体结构</span><small>解析 · 检测 · 溯源</small></button>
           <button class="principle-link" data-target="p-rule-engine"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h4l2-6 4 12 2-6h4"/><path d="M6 5v4"/><path d="M18 5v4"/></svg></i><span>规则引擎</span><small>统计评分 · 行为分析</small></button>
           <button class="principle-link" data-target="p-lstm"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5a4 4 0 0 0-2 7.5A4 4 0 0 0 8 20"/><path d="M16 5a4 4 0 0 1 2 7.5A4 4 0 0 1 16 20"/><path d="M8 5v15"/><path d="M16 5v15"/><path d="M8 12h8"/><path d="M10 8h4"/><path d="M10 16h4"/></svg></i><span>LSTM 模型</span><small>时序学习 · Beacon 识别</small></button>
+          <button class="principle-link" data-target="p-rag"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="5.5"/><path d="m15 15 4 4"/><path d="M11 5.5V8"/><path d="M11 14v2.5"/><path d="M5.5 11H8"/><path d="M14 11h2.5"/></svg></i><span>RAG 威胁溯源</span><small>知识检索 · ATT&amp;CK 匹配 · APT 归因</small></button>
           <button class="principle-link" data-target="p-findings"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-7"/><path d="M20 16v-3"/></svg></i><span>结果与发现</span><small>检测 · 分析 · 溯源</small></button>
         </aside>
         <div class="principle-content">
@@ -520,6 +522,63 @@
             </div>
           </article>
 
+          <article id="p-rag" class="principle-section">
+            <h2><span class="section-dot"></span>RAG 威胁溯源</h2>
+            <p class="lead">RAG 威胁溯源模块并不直接分析原始 PCAP，而是基于规则引擎与 LSTM 输出的统一威胁特征，结合 MITRE ATT&amp;CK 知识库与 APT 行为描述进行语义检索和归因分析，输出可解释的攻击组织匹配、技术关联和置信度结果。</p>
+            <div class="principle-grid four rag-card-grid">
+              <div class="principle-card">
+                <h3>输入对象</h3>
+                <p>接收合并后的威胁特征、检测分数与连接上下文。</p>
+                <p>保留主机、目标、时间序列和协议侧证据。</p>
+              </div>
+              <div class="principle-card">
+                <h3>知识库检索</h3>
+                <p>检索 ATT&amp;CK 技术、APT 组织和行为描述知识库。</p>
+                <p>将检测线索映射到可解释的威胁语义。</p>
+              </div>
+              <div class="principle-card">
+                <h3>归因分析</h3>
+                <p>Beacon、DNS、TLS 等证据共同参与匹配。</p>
+                <p>对候选组织和技术链进行综合排序。</p>
+              </div>
+              <div class="principle-card">
+                <h3>结果输出</h3>
+                <p>输出 APT 候选、技术链、置信度和证据链。</p>
+                <p>为后续 AI 研判提供溯源依据。</p>
+              </div>
+            </div>
+            <div class="rag-flow-panel">
+              <h3>溯源处理流程</h3>
+              <div class="rag-flow">
+                <div class="rag-flow-step"><b>1</b><span>威胁特征输入</span></div>
+                <div class="rag-flow-step"><b>2</b><span>特征向量编码</span></div>
+                <div class="rag-flow-step"><b>3</b><span>ATT&amp;CK / APT 检索</span></div>
+                <div class="rag-flow-step"><b>4</b><span>候选召回</span></div>
+                <div class="rag-flow-step"><b>5</b><span>归因置信度评估</span></div>
+                <div class="rag-flow-step"><b>6</b><span>输出溯源结果</span></div>
+              </div>
+            </div>
+            <div class="rag-result-grid">
+              <div class="principle-card rag-result-card">
+                <h3>归因结果示例</h3>
+                <dl class="rag-kv">
+                  <div><dt>APT 组织</dt><dd>APT29</dd></div>
+                  <div><dt>置信度</dt><dd>0.82</dd></div>
+                  <div><dt>主要依据</dt><dd>周期性 HTTPS Beacon、异常 DNS 查询、稳定外联目标</dd></div>
+                </dl>
+              </div>
+              <div class="principle-card rag-result-card">
+                <h3>ATT&amp;CK 技术映射示例</h3>
+                <ul class="rag-tech-list">
+                  <li><code>T1071.001</code><span>Web Protocols</span></li>
+                  <li><code>T1071.004</code><span>DNS</span></li>
+                  <li><code>T1041</code><span>Exfiltration Over C2 Channel</span></li>
+                  <li><code>T1105</code><span>Ingress Tool Transfer</span></li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
           <article id="p-findings" class="principle-section">
             <h2><span class="section-dot"></span>结果与发现</h2>
             <p>C2Sherlock 的核心发现是：隐蔽 C2 通信即使隐藏了内容，也很难完全隐藏行为。周期性连接、稳定数据量、长期持续访问和低流行度外部目标，往往会共同构成可疑信号。</p>
@@ -673,6 +732,6 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20260702"></script>
 </body>
 </html>

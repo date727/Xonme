@@ -57,11 +57,12 @@ let currentStep = null;
 let latestReportMarkdown = "";
 let activeController = null;
 
-const stepOrder = ["zeek", "rita", "lstm", "ai"];
+const stepOrder = ["zeek", "rita", "lstm", "rag", "ai"];
 const stepLabels = {
   zeek: "正在进行日志解析...",
   rita: "正在运行规则引擎...",
   lstm: "正在进行 LSTM 时序检测...",
+  rag: "正在进行 RAG 溯源归因...",
   ai: "正在生成大模型研判报告...",
 };
 
