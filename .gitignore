@@ -6,5 +6,6 @@ backend/uploads/
 backend/outputs/
 backend/chroma_db
 backend/local_models
+attack-stix-data
 *.csv
 .DS_Store
