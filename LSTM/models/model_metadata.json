@@ -17,8 +17,21 @@
     "iat_oresp_nf_9"
   ],
   "seq_length": 10,
+  "group_cols": [
+    "source_file",
+    "src_ip",
+    "dst_ip",
+    "dst_port",
+    "ip_protocol"
+  ],
+  "sort_col": "start_time",
   "input_shape": [
     10,
     15
-  ]
+  ],
+  "labels": {
+    "0": "benign",
+    "1": "cs"
+  },
+  "split": "group"
 }

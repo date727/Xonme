@@ -283,21 +283,23 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     csv_path = OUTPUTS_DIR / f"{name}.csv"
     csv_path.write_text(csv_text, encoding="utf-8")
 
-    # LSTM 独立分析：直接从 Zeek conn.log 提取全部连接（与 RITA 并行）
+    # LSTM independent analysis from Zeek conn.log.
+    # The current model is trained for HTTP/HTTPS, so DNS and other traffic stay
+    # in the RITA/RAG path instead of being sent to the LSTM.
     lstm_results = None
     if _LSTM_AVAILABLE:
         try:
             from app.zeek_to_lstm_converter import export_lstm_features_from_zeek
-            print("🔍 LSTM: extracting features from Zeek conn.log (ALL connections, independent of RITA)")
+            print("LSTM: extracting HTTP/HTTPS features from Zeek conn.log (independent of RITA)")
             lstm_csv_text = export_lstm_features_from_zeek(output_dir)
             
             if lstm_csv_text:
-                print("✓ LSTM: feature extraction complete, running beacon detection...")
+                print("LSTM: feature extraction complete, running beacon detection...")
                 lstm_results = predict_beacons(lstm_csv_text)
             else:
-                print("⏭ LSTM: skipped (no connections found in conn.log)")
+                print("LSTM: skipped (no HTTP/HTTPS connections found in conn.log)")
         except Exception as e:
-            print(f"⚠ LSTM: analysis failed — {e}")
+            print(f"LSTM: analysis failed - {e}")
             import traceback
             traceback.print_exc()
 
@@ -307,7 +309,9 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         print("⏭ RAG: skipped (dependencies not installed)")
     else:
         try:
-            # 检查是否有威胁需要归因
+            # Merge RITA and LSTM when either source has usable output. If the
+            # LSTM is skipped because the traffic is DNS-only, RAG still receives
+            # the RITA features.
             if (lstm_results and lstm_results.get('total_flagged', 0) > 0) or (rita_ok):
                 from app.threat_feature_merger import merge_threat_features
                 
@@ -322,7 +326,7 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
                     print("⏭ RAG: RITA unavailable, using LSTM-only features")
                 
                 # 步骤 2: 合并 RITA 和 LSTM 的结果
-                print("🔄 RAG: merging RITA and LSTM detection results...")
+                print("RAG: merging RITA and LSTM detection results...")
                 merged_features = merge_threat_features(rita_features, lstm_results)
                 
                 if not merged_features:
@@ -425,22 +429,24 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
             csv_path = OUTPUTS_DIR / f"{name}.csv"
             csv_path.write_text(csv_text, encoding="utf-8")
 
-            # LSTM 独立分析：直接从 Zeek conn.log 提取全部连接（与 RITA 并行）
+            # LSTM independent analysis from Zeek conn.log.
+            # The current model is trained for HTTP/HTTPS, so DNS and other traffic stay
+            # in the RITA/RAG path instead of being sent to the LSTM.
             yield sse_event("step", "lstm")
             lstm_results = None
             if _LSTM_AVAILABLE:
                 try:
                     from app.zeek_to_lstm_converter import export_lstm_features_from_zeek
-                    print("🔍 LSTM: extracting features from Zeek conn.log (ALL connections, independent of RITA)")
+                    print("LSTM: extracting HTTP/HTTPS features from Zeek conn.log (independent of RITA)")
                     lstm_csv_text = export_lstm_features_from_zeek(output_dir)
                     
                     if lstm_csv_text:
-                        print("✓ LSTM: feature extraction complete, running beacon detection...")
+                        print("LSTM: feature extraction complete, running beacon detection...")
                         lstm_results = predict_beacons(lstm_csv_text)
                     else:
-                        print("⏭ LSTM: skipped (no connections found in conn.log)")
+                        print("LSTM: skipped (no HTTP/HTTPS connections found in conn.log)")
                 except Exception as e:
-                    print(f"⚠ LSTM: analysis failed — {e}")
+                    print(f"LSTM: analysis failed - {e}")
                     import traceback
                     traceback.print_exc()
 
@@ -464,7 +470,7 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                     # 步骤 2: 合并 RITA 和 LSTM 的结果
                     if rita_features or (lstm_results and lstm_results.get('total_flagged', 0) > 0):
                         from app.threat_feature_merger import merge_threat_features
-                        print("🔄 RAG: merging RITA and LSTM detection results...")
+                        print("RAG: merging RITA and LSTM detection results...")
                         merged_features = merge_threat_features(rita_features, lstm_results)
                         
                         if not merged_features:

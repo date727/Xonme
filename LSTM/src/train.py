@@ -1,137 +1,145 @@
-# src/train.py
-"""模型训练脚本。"""
-import sys
+"""Train the LSTM binary classifier."""
 import json
-import numpy as np
+import sys
 from pathlib import Path
 
-# 确保项目根和 src/ 均可导入
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_PROJECT_ROOT))
-sys.path.insert(0, str(_PROJECT_ROOT / "src"))
-
-from config import (MODELS_DIR, LOGS_DIR, EPOCHS, BATCH_SIZE,
-                    SEQ_LENGTH, MODEL_PATH, METADATA_PATH, FEATURE_COLS)
-from data_prep import prepare_data
-from model import build_lstm_model
-
+import numpy as np
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 from sklearn.utils.class_weight import compute_class_weight
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
 
-def train():
-    # 1. 准备数据
-    print("=" * 60)
-    print("加载数据...")
-    print("=" * 60)
-    X, y, groups, scaler = prepare_data()
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_PROJECT_ROOT))
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-    if len(X) < 20:
-        print(f"警告: 仅有 {len(X)} 条序列，样本量偏少，模型可能严重过拟合。")
-        print("建议增加训练数据后再训练。")
-        return
+from config import (  # noqa: E402
+    BATCH_SIZE,
+    EPOCHS,
+    FEATURE_COLS,
+    GROUP_COLS,
+    LOGS_DIR,
+    METADATA_PATH,
+    MODEL_PATH,
+    SEQ_LENGTH,
+    SORT_COL,
+)
+from data_prep import fit_transform_sequences, prepare_data  # noqa: E402
+from model import build_lstm_model  # noqa: E402
 
-    # 2. 拆分训练集/测试集
-    #    优先按通信对分组拆分以避免数据泄露；
-    #    当组数太少（<4）或分组拆分导致某类别缺失时，回退为随机分层拆分
+
+def _split_data(X, y, groups):
     unique_groups = np.unique(groups)
     use_group_split = len(unique_groups) >= 4
 
     if use_group_split:
-        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-        train_idx, test_idx = next(gss.split(X, y, groups))
+        splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+        train_idx, test_idx = next(splitter.split(X, y, groups))
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
 
-        # 检查拆分后两个集合是否都包含了两类样本
-        train_has_both = len(np.unique(y_train)) == 2
-        test_has_both = len(np.unique(y_test)) == 2
-        if not (train_has_both and test_has_both):
-            print("警告: 分组拆分导致训练/测试集中缺少某一类别。"
-                  "回退为随机分层拆分。")
-            use_group_split = False
+        if len(np.unique(y_train)) == 2 and len(np.unique(y_test)) == 2:
+            return X_train, X_test, y_train, y_test, "group"
 
-    if not use_group_split:
-        if len(unique_groups) < 4:
-            print(f"警告: 仅 {len(unique_groups)} 个通信对，不足以做分组拆分。"
-                  "回退为随机分层拆分（评估指标将偏乐观）。")
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
+        print("Group split lost one class; falling back to stratified random split.")
 
-    print(f"训练集序列: {len(X_train)}, 测试集序列: {len(X_test)}")
-    print(f"训练集标签分布: 良性={np.sum(y_train==0)}, 恶意={np.sum(y_train==1)}")
-    print(f"测试集标签分布: 良性={np.sum(y_test==0)}, 恶意={np.sum(y_test==1)}")
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+    return X_train, X_test, y_train, y_test, "stratified"
 
-    # 3. 构建模型
+
+def train():
+    print("=" * 60)
+    print("Loading data")
+    print("=" * 60)
+    X, y, groups = prepare_data()
+
+    if len(X) < 20:
+        print(f"Only {len(X)} sequences generated; add more data before training.")
+        return None
+
+    X_train, X_test, y_train, y_test, split_name = _split_data(X, y, groups)
+    X_train, X_test, _ = fit_transform_sequences(X_train, X_test)
+
+    print(f"Split: {split_name}")
+    print(f"Train sequences: {len(X_train)}, test sequences: {len(X_test)}")
+    print(f"Train labels: benign={np.sum(y_train == 0)}, cs={np.sum(y_train == 1)}")
+    print(f"Test labels: benign={np.sum(y_test == 0)}, cs={np.sum(y_test == 1)}")
+
     model = build_lstm_model(input_shape=(SEQ_LENGTH, X.shape[2]))
     model.summary()
 
-    # 4. 类别权重（处理不平衡）
-    class_weights = compute_class_weight(
-        'balanced', classes=np.unique(y_train), y=y_train
+    class_weight_values = compute_class_weight(
+        class_weight="balanced", classes=np.unique(y_train), y=y_train
     )
-    class_weight_dict = dict(enumerate(class_weights))
-    print(f"类别权重: {class_weight_dict}")
+    class_weight = {
+        int(cls): float(weight)
+        for cls, weight in zip(np.unique(y_train), class_weight_values)
+    }
+    print(f"Class weights: {class_weight}")
 
-    # 5. 回调函数
     callbacks = [
         EarlyStopping(
-            monitor='val_loss',
-            patience=15,
+            monitor="val_loss",
+            patience=3,
             restore_best_weights=True,
             verbose=1,
         ),
         ModelCheckpoint(
             filepath=str(MODEL_PATH),
             save_best_only=True,
-            monitor='val_loss',
+            monitor="val_loss",
             verbose=1,
         ),
     ]
 
-    # 6. 训练
     print("=" * 60)
-    print("开始训练...")
+    print("Training")
     print("=" * 60)
     history = model.fit(
-        X_train, y_train,
+        X_train,
+        y_train,
         epochs=EPOCHS,
         batch_size=BATCH_SIZE,
-        validation_split=0.2,          # 从训练集中分出一部分做验证
-        class_weight=class_weight_dict,
+        validation_split=0.2,
+        class_weight=class_weight,
         callbacks=callbacks,
         verbose=1,
     )
 
-    # 7. 保存训练历史
     history_file = LOGS_DIR / "training_history.json"
-    with open(history_file, "w") as f:
-        # 将 numpy 类型转为 Python 原生类型
-        serializable = {
-            k: [float(v) for v in vals]
-            for k, vals in history.history.items()
-        }
-        json.dump(serializable, f, indent=2)
-    print(f"训练历史已保存至 {history_file}")
+    with open(history_file, "w", encoding="utf-8") as f:
+        json.dump({k: [float(v) for v in vals] for k, vals in history.history.items()}, f, indent=2)
+    print(f"Training history saved to {history_file}")
 
-    # 8. 保存模型元数据
     metadata = {
         "feature_cols": FEATURE_COLS,
         "seq_length": SEQ_LENGTH,
+        "group_cols": GROUP_COLS,
+        "sort_col": SORT_COL,
         "input_shape": list(X.shape[1:]),
+        "labels": {"0": "benign", "1": "cs"},
+        "split": split_name,
     }
-    with open(METADATA_PATH, "w") as f:
+    with open(METADATA_PATH, "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)
-    print(f"模型元数据已保存至 {METADATA_PATH}")
+    print(f"Model metadata saved to {METADATA_PATH}")
 
-    # 9. 评估
     print("=" * 60)
-    print("测试集评估...")
+    print("Evaluation")
     print("=" * 60)
-    loss, acc = model.evaluate(X_test, y_test, verbose=1)
-    print(f"测试集 Loss: {loss:.4f}, Accuracy: {acc:.4f}")
+    loss, keras_acc = model.evaluate(X_test, y_test, verbose=1)
+    probs = model.predict(X_test, verbose=0).ravel()
+    preds = (probs >= 0.5).astype(int)
+
+    print(f"Test loss: {loss:.4f}, Keras accuracy: {keras_acc:.4f}")
+    print(f"Accuracy: {accuracy_score(y_test, preds):.4f}")
+    print("Confusion matrix:")
+    print(confusion_matrix(y_test, preds))
+    print("Classification report:")
+    print(classification_report(y_test, preds, target_names=["benign", "cs"], zero_division=0))
 
     return model
 
