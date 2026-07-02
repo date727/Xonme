@@ -385,7 +385,15 @@ p {
   stroke-width: 2.6;
   stroke-dasharray: 16 24;
   stroke-dashoffset: 0;
-  animation: flowDash 7.5s linear infinite;
+  animation: flowDash 8.8s linear infinite;
+}
+
+.evidence-paths use {
+  fill: none;
+  stroke: rgba(15, 118, 110, 0.18);
+  stroke-width: 1.6;
+  stroke-dasharray: 5 9;
+  stroke-linecap: round;
 }
 
 .flow-particles circle {
@@ -410,7 +418,9 @@ p {
 }
 
 .node-mini rect,
-.engine-node rect {
+.engine-node rect,
+.feature-fuse-node polygon,
+.rag-core {
   fill: url(#nodeGradient);
   stroke: rgba(20, 191, 130, 0.34);
   stroke-width: 1.5;
@@ -421,6 +431,10 @@ p {
 .node-mini path,
 .engine-node path,
 .engine-node circle,
+.feature-fuse-node path,
+.feature-fuse-node circle,
+.rag-node path,
+.rag-node circle,
 .report-node path {
   fill: none;
   stroke: #0f3b34;
@@ -436,6 +450,9 @@ p {
 
 .node-mini text,
 .engine-node text,
+.feature-fuse-node text,
+.rag-node text,
+.ai-node text,
 .report-node text {
   fill: rgba(51, 65, 85, 0.68);
   font-size: 10px;
@@ -444,12 +461,46 @@ p {
   text-anchor: middle;
 }
 
-.node-rule rect {
+.node-rita rect {
   animation-delay: 0.8s;
 }
 
 .node-lstm rect {
   animation-delay: 1.6s;
+}
+
+.feature-fuse-node polygon {
+  fill: rgba(236, 253, 245, 0.96);
+  stroke: rgba(20, 191, 130, 0.44);
+  animation-delay: 2s;
+}
+
+.feature-fuse-node .fuse-ring {
+  fill: rgba(20, 191, 130, 0.06);
+  stroke: rgba(20, 191, 130, 0.28);
+  stroke-width: 1.4;
+  animation: fusionPulse 5.8s ease-in-out infinite;
+}
+
+.feature-fuse-node circle:not(.fuse-ring),
+.rag-node circle:not(.rag-scan):not(.rag-core) {
+  fill: var(--green);
+  stroke: none;
+}
+
+.rag-scan {
+  fill: none;
+  stroke: rgba(73, 215, 232, 0.34);
+  stroke-width: 1.2;
+  stroke-dasharray: 6 9;
+  transform-origin: center;
+  animation: ragScan 7.6s ease-in-out infinite;
+}
+
+.rag-core {
+  fill: rgba(240, 253, 250, 0.96);
+  stroke: rgba(56, 189, 248, 0.38);
+  animation-delay: 2.6s;
 }
 
 .fusion-halo {
@@ -478,6 +529,10 @@ p {
   fill: var(--green);
 }
 
+.ai-node text {
+  fill: rgba(8, 122, 92, 0.74);
+}
+
 .report-node path:first-child {
   fill: rgba(255, 255, 255, 0.92);
   stroke: rgba(96, 165, 250, 0.42);
@@ -487,6 +542,11 @@ p {
 
 .report-node path:not(:first-child) {
   stroke: #1e3a5f;
+}
+
+.report-node circle {
+  fill: var(--green);
+  stroke: none;
 }
 
 .board-note {
@@ -545,7 +605,12 @@ p {
   color: var(--ink);
 }
 
-.core-grid,
+.core-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
 .advantage-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -581,6 +646,10 @@ p {
 
 .feature-icon.cyan {
   background: #38bdf8;
+}
+
+.feature-icon.blue {
+  background: #2563eb;
 }
 
 .feature-card h3 {
@@ -1425,16 +1494,16 @@ code {
 
 .flow {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(8, minmax(92px, 1fr));
+  gap: 12px;
   align-items: stretch;
 }
 
 .flow-node {
   position: relative;
   min-width: 0;
-  min-height: 310px;
-  padding: 16px 10px;
+  min-height: 336px;
+  padding: 15px 8px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
@@ -1451,7 +1520,7 @@ code {
   content: "";
   position: absolute;
   top: 50%;
-  right: -10px;
+  right: -9px;
   width: 12px;
   height: 12px;
   border-top: 2px solid #2f80d1;
@@ -1461,23 +1530,23 @@ code {
 }
 
 .flow-node h3 {
-  margin: 14px 0 10px;
-  font-size: 15.5px;
+  margin: 13px 0 9px;
+  font-size: 14.2px;
   line-height: 1.25;
 }
 
 .flow-node p {
   margin-bottom: 0;
   color: #334155;
-  font-size: 12.5px;
-  line-height: 1.68;
+  font-size: 12px;
+  line-height: 1.66;
 }
 
 .num {
   display: inline-grid;
   width: 34px;
   height: 34px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   place-items: center;
   border-radius: 50%;
   color: #fff;
@@ -1489,8 +1558,8 @@ code {
 
 .flow-icon {
   display: grid;
-  width: 70px;
-  height: 70px;
+  width: 66px;
+  height: 66px;
   place-items: center;
   border: 1px solid #bfdbfe;
   border-radius: 18px;
@@ -1499,8 +1568,8 @@ code {
 }
 
 .flow-icon svg {
-  width: 44px;
-  height: 44px;
+  width: 42px;
+  height: 42px;
   stroke: #0f2748;
   stroke-width: 2.2;
   fill: none;
@@ -2043,6 +2112,60 @@ code {
   margin-top: 22px;
 }
 
+.mentor-card {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin-top: 22px;
+  padding: 28px;
+  border: 1px solid #7dd3fc;
+  border-top: 4px solid #0284c7;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at 92% 4%, rgba(14, 165, 233, 0.18), transparent 34%),
+    linear-gradient(135deg, #e0f2fe, #f8fcff 62%);
+  box-shadow: 0 18px 46px rgba(2, 132, 199, 0.14);
+}
+
+.mentor-avatar {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  place-items: center;
+  border-radius: 20px;
+  color: #fff;
+  background: linear-gradient(135deg, #0369a1, #0ea5e9);
+  font-size: 28px;
+  font-weight: 800;
+  box-shadow: 0 16px 30px rgba(2, 132, 199, 0.24);
+}
+
+.mentor-role {
+  display: inline-flex;
+  margin-bottom: 10px;
+  padding: 5px 10px;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  color: #075985;
+  background: rgba(240, 249, 255, 0.86);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.mentor-card h2 {
+  margin-bottom: 10px;
+  color: #083344;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.mentor-content p:last-child {
+  margin-bottom: 0;
+  color: #475569;
+  line-height: 1.82;
+}
+
 .member-card {
   display: grid;
   grid-template-columns: 58px minmax(0, 1fr);
@@ -2144,6 +2267,18 @@ code {
   }
 }
 
+@keyframes ragScan {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.88) rotate(0deg);
+  }
+  45% {
+    opacity: 0.72;
+    transform: scale(1.12) rotate(10deg);
+  }
+}
+
 @media (max-width: 980px) {
   .workspace {
     grid-template-columns: 1fr;
@@ -2159,6 +2294,10 @@ code {
   .team-hero,
   .principle-layout {
     grid-template-columns: 1fr;
+  }
+
+  .core-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .principle-nav {
@@ -2252,6 +2391,12 @@ code {
     grid-template-columns: 1fr;
   }
 
+  .mentor-card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 22px;
+  }
+
   .flow {
     grid-template-columns: 1fr;
   }
@@ -2301,6 +2446,10 @@ code {
   .flow-particles circle,
   .node-mini rect,
   .engine-node rect,
+  .feature-fuse-node polygon,
+  .feature-fuse-node .fuse-ring,
+  .rag-scan,
+  .rag-core,
   .fusion-halo,
   .report-node path:first-child {
     animation: none;
@@ -2316,5 +2465,9 @@ code {
 
   .fusion-halo {
     opacity: 0.5;
+  }
+
+  .rag-scan {
+    opacity: 0.38;
   }
 }

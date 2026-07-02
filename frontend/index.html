@@ -39,11 +39,9 @@
             <button class="ghost" data-tab="principle">查看原理</button>
           </div>
         </div>
-        <div class="hero-board hero-graphic-card" aria-label="多引擎串行与 AI 融合研判动态图">
+        <div class="hero-board hero-graphic-card" aria-label="C2Sherlock 检测、溯源与 AI 研判结构图">
           <div class="hero-graphic-orbit" aria-hidden="true"></div>
-          <svg class="hero-pipeline-graphic" viewBox="0 0 560 400" role="img" aria-labelledby="hero-graphic-title hero-graphic-desc">
-            <title id="hero-graphic-title">C2Sherlock multi-engine analysis flow</title>
-            <desc id="hero-graphic-desc">PCAP data flows through log parsing, rule engine, and LSTM score nodes, converges at an AI fusion hub, then outputs an analysis report.</desc>
+          <svg class="hero-pipeline-graphic" viewBox="0 0 560 400" role="img" aria-label="PCAP 经 Zeek 解析后进入 RITA 和 LSTM 两路检测，检测结果在 FUSE 合并后进入 RAG 归因，RITA、LSTM 和 RAG 三路证据共同输入 AI，最终输出报告。">
             <defs>
               <linearGradient id="flowGradient" x1="40" y1="340" x2="488" y2="78" gradientUnits="userSpaceOnUse">
                 <stop offset="0" stop-color="var(--accent-cyan)" stop-opacity="0.38" />
@@ -62,12 +60,16 @@
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
-              <path id="pcapToLog" d="M58 318 C104 302 120 270 158 244" />
-              <path id="logToRule" d="M178 228 C210 214 222 190 250 170" />
-              <path id="ruleToAi" d="M274 164 C314 150 330 176 352 194" />
-              <path id="logToLstm" d="M170 244 C226 272 274 292 332 274" />
-              <path id="lstmToAi" d="M360 260 C374 238 370 218 356 198" />
-              <path id="aiToReport" d="M386 174 C418 130 454 100 500 78" />
+              <path id="pcapToLog" d="M88 300 C120 290 140 258 166 238" />
+              <path id="logToRita" d="M190 224 C214 190 232 158 254 146" />
+              <path id="logToLstm" d="M190 244 C214 272 232 296 254 292" />
+              <path id="ritaToFuse" d="M306 150 C324 164 340 194 349 219" />
+              <path id="lstmToFuse" d="M306 292 C324 278 340 248 349 229" />
+              <path id="fuseToRag" d="M388 224 H424" />
+              <path id="ragToAi" d="M450 224 H499" />
+              <path id="ritaToAi" d="M306 145 C376 150 438 188 499 222" />
+              <path id="lstmToAi" d="M306 292 C376 316 438 282 499 226" />
+              <path id="aiToReport" d="M520 188 C522 148 522 118 520 96" />
             </defs>
 
             <g class="graphic-grid">
@@ -77,91 +79,87 @@
 
             <g class="flow-paths">
               <use href="#pcapToLog" />
-              <use href="#logToRule" />
-              <use href="#ruleToAi" />
+              <use href="#logToRita" />
               <use href="#logToLstm" />
-              <use href="#lstmToAi" />
+              <use href="#ritaToFuse" />
+              <use href="#lstmToFuse" />
+              <use href="#fuseToRag" />
+              <use href="#ragToAi" />
               <use href="#aiToReport" />
+            </g>
+            <g class="evidence-paths">
+              <use href="#ritaToAi" />
+              <use href="#lstmToAi" />
             </g>
             <g class="flow-paths flow-paths-active">
               <use href="#pcapToLog" />
-              <use href="#logToRule" />
-              <use href="#ruleToAi" />
+              <use href="#logToRita" />
               <use href="#logToLstm" />
-              <use href="#lstmToAi" />
+              <use href="#ritaToFuse" />
+              <use href="#lstmToFuse" />
+              <use href="#fuseToRag" />
+              <use href="#ragToAi" />
               <use href="#aiToReport" />
             </g>
 
-            <g class="flow-labels" aria-hidden="true">
-              <g class="flow-label" transform="translate(104 284)">
-                <rect x="-22" y="-11" width="44" height="22" rx="11" />
-                <text y="4">ZEEK</text>
-              </g>
-              <g class="flow-label" transform="translate(214 198)">
-                <rect x="-21" y="-11" width="42" height="22" rx="11" />
-                <text y="4">RITA</text>
-              </g>
-              <g class="flow-label" transform="translate(248 270)">
-                <rect x="-24" y="-11" width="48" height="22" rx="11" />
-                <text y="4">LSTM</text>
-              </g>
-              <g class="flow-label" transform="translate(425 178)">
-                <rect x="-18" y="-11" width="36" height="22" rx="11" />
-                <text y="4">LLM</text>
-              </g>
-            </g>
-
-            <g class="flow-particles">
-              <circle r="4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="0s"><mpath href="#pcapToLog" /></animateMotion></circle>
-              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="1s"><mpath href="#logToRule" /></animateMotion></circle>
-              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="2.1s"><mpath href="#ruleToAi" /></animateMotion></circle>
-              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="1.45s"><mpath href="#logToLstm" /></animateMotion></circle>
-              <circle r="3.4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="2.6s"><mpath href="#lstmToAi" /></animateMotion></circle>
-              <circle r="4"><animateMotion dur="7.5s" repeatCount="indefinite" begin="3.35s"><mpath href="#aiToReport" /></animateMotion></circle>
-            </g>
-
-            <g class="data-source node-mini" transform="translate(58 318)">
-              <title>PCAP</title>
+            <g class="data-source node-mini" transform="translate(88 300)">
               <rect x="-34" y="-20" width="68" height="40" rx="14" />
               <path d="M-16 -6 H8 L18 4 V14 H-16 Z M8 -6 V4 H18" />
               <text x="0" y="34">PCAP</text>
             </g>
 
-            <g class="engine-node node-log" transform="translate(166 238)">
-              <title>Log Parse</title>
+            <g class="engine-node node-log" transform="translate(178 234)">
               <rect x="-38" y="-28" width="76" height="56" rx="18" />
               <circle cx="-14" cy="-6" r="4" />
               <path d="M0 -12 H18 M0 0 H18 M-18 12 H18" />
               <text x="0" y="45">LOG</text>
             </g>
 
-            <g class="engine-node node-rule" transform="translate(260 166)">
-              <title>Rule Engine</title>
+            <g class="engine-node node-rita" transform="translate(278 142)">
               <rect x="-42" y="-30" width="84" height="60" rx="18" />
               <path d="M-16 -6 L-6 4 L16 -16 M-16 14 H18" />
-              <text x="0" y="48">RULE</text>
+              <text x="0" y="48">RITA</text>
             </g>
 
-            <g class="engine-node node-lstm" transform="translate(350 268)">
-              <title>LSTM Score</title>
+            <g class="engine-node node-lstm" transform="translate(278 292)">
               <rect x="-42" y="-30" width="84" height="60" rx="18" />
               <path d="M-20 12 C-10 -16 2 18 18 -12" />
               <circle cx="22" cy="-16" r="3.4" />
-              <text x="0" y="48">SCORE</text>
+              <text x="0" y="48">LSTM</text>
             </g>
 
-            <g class="fusion-node" transform="translate(366 188)">
-              <title>AI Fusion</title>
-              <circle class="fusion-halo" r="58" />
-              <circle class="fusion-core" r="38" />
+            <g class="feature-fuse-node" transform="translate(368 224)">
+              <polygon points="0,-36 32,-18 32,18 0,36 -32,18 -32,-18" />
+              <circle class="fuse-ring" r="25" />
+              <path d="M-18 -10 C-7 -10 -8 0 0 0 M-18 10 C-7 10 -8 0 0 0 M18 0 H0" />
+              <circle cx="-19" cy="-10" r="3.2" />
+              <circle cx="-19" cy="10" r="3.2" />
+              <circle cx="19" cy="0" r="3.2" />
+              <text x="0" y="54">FUSE</text>
+            </g>
+
+            <g class="rag-node" transform="translate(437 224)">
+              <circle class="rag-scan" r="29" />
+              <circle class="rag-core" r="23" />
+              <path d="M-16 0 A16 16 0 1 0 16 0 A16 16 0 1 0 -16 0" />
+              <path d="M-23 0 H23 M0 -23 V23 M-10 -10 L-19 -19 M10 10 L19 19" />
+              <circle cx="0" cy="0" r="4" />
+              <circle cx="-18" cy="-18" r="3" />
+              <circle cx="18" cy="18" r="3" />
+              <text x="0" y="54">RAG</text>
+            </g>
+
+            <g class="fusion-node ai-node" transform="translate(520 224)">
+              <circle class="fusion-halo" r="39" />
+              <circle class="fusion-core" r="31" />
               <path d="M-14 -4 C-8 -18 10 -18 16 -4 C24 -2 24 12 14 16 H-16 C-26 14 -26 -1 -14 -4Z" />
               <circle cx="-11" cy="3" r="3" />
               <circle cx="11" cy="3" r="3" />
               <path d="M-8 13 H8" />
+              <text x="0" y="58">AI</text>
             </g>
 
-            <g class="report-node" transform="translate(504 76)">
-              <title>AI Report</title>
+            <g class="report-node" transform="translate(520 68)">
               <path d="M0 -34 L34 0 L0 34 L-34 0 Z" />
               <path d="M-12 -10 H10 M-12 2 H14 M-12 14 H6" />
               <text x="0" y="52">REPORT</text>
@@ -188,8 +186,13 @@
           </article>
           <article class="feature-card">
             <span class="feature-icon cyan">03</span>
-            <h3>溯源研判 / 大模型报告</h3>
-            <p>融合检测证据，输出可读的威胁概览、重点连接解释和处置建议。</p>
+            <h3>威胁溯源</h3>
+            <p>结合检测结果与知识库检索，完成攻击组织匹配、技术关联和归因分析。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon blue">04</span>
+            <h3>大模型报告</h3>
+            <p>融合检测证据与溯源结果，自动生成威胁概览、重点连接分析、风险判断和处置建议。</p>
           </article>
         </div>
       </section>
@@ -228,7 +231,6 @@
           </div>
           <div class="quick-actions">
             <button class="chip" data-api="http://127.0.0.1:8765">本机后端</button>
-            <button class="chip" data-api="http://172.20.10.13:8765">远程 Ubuntu 示例</button>
             <button class="chip" data-api="http://218.244.140.250:8765">局域网示例</button>
           </div>
           <p class="request-line">当前请求：<code id="current-endpoint">http://127.0.0.1:8765/analyze/stream</code></p>
@@ -291,7 +293,7 @@
         <aside class="principle-nav">
           <button class="principle-link active" data-target="p-motivation"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.6-.9 5-.6 8 1.2 3-1.8 5.4-2.1 8-1.2v13c-2.6-.9-5-.6-8 1.2-3-1.8-5.4-2.1-8-1.2z"/><path d="M12 6.7v13"/></svg></i><span>背景与动机</span><small>APT · Beacon · 挑战</small></button>
           <button class="principle-link" data-target="p-limitations"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 22 20H2z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></i><span>现有方法的局限</span><small>规则 · 深度学习 · 可解释性</small></button>
-          <button class="principle-link" data-target="p-architecture"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></i><span>总体结构</span><small>解析 · 检测 · AI 研判</small></button>
+          <button class="principle-link" data-target="p-architecture"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/></svg></i><span>总体结构</span><small>解析 · 检测 · 溯源</small></button>
           <button class="principle-link" data-target="p-rule-engine"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h4l2-6 4 12 2-6h4"/><path d="M6 5v4"/><path d="M18 5v4"/></svg></i><span>规则引擎</span><small>统计评分 · 行为分析</small></button>
           <button class="principle-link" data-target="p-lstm"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5a4 4 0 0 0-2 7.5A4 4 0 0 0 8 20"/><path d="M16 5a4 4 0 0 1 2 7.5A4 4 0 0 1 16 20"/><path d="M8 5v15"/><path d="M16 5v15"/><path d="M8 12h8"/><path d="M10 8h4"/><path d="M10 16h4"/></svg></i><span>LSTM 模型</span><small>时序学习 · Beacon 识别</small></button>
           <button class="principle-link" data-target="p-findings"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M12 16V8"/><path d="M16 16v-7"/><path d="M20 16v-3"/></svg></i><span>结果与发现</span><small>检测 · 分析 · 溯源</small></button>
@@ -349,20 +351,21 @@
 
           <article id="p-architecture" class="principle-section">
             <h2><span class="section-dot"></span>总体结构</h2>
-            <p>C2Sherlock 的分析流程从 PCAP 文件上传开始。系统首先将原始数据包解析为结构化网络日志，再按通信关系构建连接行为特征；随后通过规则引擎完成统计评分，利用 LSTM 模型进行时序异常识别，最后融合多源检测结果，生成自然语言研判报告。</p>
+            <p>C2Sherlock 的分析流程从 PCAP 文件上传开始。系统首先将原始数据包解析为结构化网络日志，再按通信关系构建连接行为特征；随后通过规则检测引擎与 LSTM 时序模型完成双引擎检测，融合威胁特征后进入 RAG 溯源模块，最终由 AI 综合研判生成威胁报告与处置建议。</p>
             <div class="flow-wrap process-flow">
               <div class="flow-heading">
                 <h3>C2Sherlock 系统处理流程</h3>
-                <p>多引擎串联分析，AI 融合研判，精准识别隐蔽 C2 通信</p>
+                <p>检测、融合、溯源与 AI 研判串联，精准识别隐蔽 C2 通信</p>
               </div>
               <div class="flow">
-                <div class="flow-node"><span class="num">1</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l7 7v31H12z"/><path d="M29 5v8h7"/><path d="M17 28h14"/><path d="M17 34h14"/><path d="M17 22h9"/></svg></span><h3>数据输入</h3><p>上传 .pcap / .pcapng 文件，创建独立分析任务。</p></div>
+                <div class="flow-node"><span class="num">1</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M14 35 C8 35 6 31 7 27 C8 23 11 21 15 21 C16 14 21 10 27 11 C33 12 37 17 37 23 C41 24 43 27 43 31 C43 35 40 38 35 38 H15"/><path d="M24 38 V23"/><path d="M17 30 L24 23 L31 30"/></svg></span><h3>数据输入</h3><p>上传 .pcap / .pcapng 文件，创建独立分析任务。</p></div>
                 <div class="flow-node"><span class="num">2</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 34h28"/><path d="M13 29c5-9 9 6 14-4 3-6 6-5 10-1"/><path d="M16 40h16"/><path d="M12 10h24v24H12z"/></svg></span><h3>流量解析</h3><p>解析协议与会话，生成 conn、dns、http、ssl 等日志。</p></div>
-                <div class="flow-node green"><span class="num">3</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 8h16a6 6 0 0 1 0 12H16a6 6 0 0 1 0-12z"/><path d="M10 20v14c0 3.3 6.3 6 14 6s14-2.7 14-6V20"/><path d="M24 27v10"/><path d="M15 35h6"/><path d="M27 35h6"/></svg></span><h3>特征构建</h3><p>按"内网主机—外部目标"聚合，提取连接行为特征。</p></div>
-                <div class="flow-node orange"><span class="num">4</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 7h18l5 5v29H13z"/><path d="M31 7v7h5"/><path d="m18 19 3 3 5-6"/><path d="M29 22h4"/><path d="m18 30 3 3 5-6"/><circle cx="34" cy="34" r="6"/><path d="m38 38 5 5"/></svg></span><h3>规则引擎</h3><p>基于时间、数据量、持续性和分布稳定性计算风险分。</p></div>
-                <div class="flow-node purple"><span class="num">5</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 8a8 8 0 0 0-4 15 8 8 0 0 0 4 17"/><path d="M30 8a8 8 0 0 1 4 15 8 8 0 0 1-4 17"/><path d="M18 8v32"/><path d="M30 8v32"/><circle cx="21" cy="17" r="2"/><circle cx="27" cy="24" r="2"/><circle cx="21" cy="31" r="2"/><path d="M21 17h6v7h-6v7h6"/></svg></span><h3>LSTM 检测</h3><p>学习复杂时序模式，输出 Beacon 概率与风险等级。</p></div>
-                <div class="flow-node green"><span class="num">6</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M15 12h10v10H15z"/><path d="M28 8h10v10H28z"/><path d="M27 28h10v10H27z"/><path d="M10 30h10v10H10z"/><path d="M25 17h3"/><path d="M20 30l7 3"/><path d="M33 18l-1 10"/></svg></span><h3>结果融合</h3><p>融合规则分数、模型概率、连接上下文与证据特征。</p></div>
-                <div class="flow-node"><span class="num">7</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 5h17l7 7v31H12z"/><path d="M29 5v8h7"/><path d="M18 35v-7"/><path d="M24 35V22"/><path d="M30 35v-10"/><path d="M17 16h12"/></svg></span><h3>AI 研判报告</h3><p>生成威胁概览、重点连接分析、溯源建议与处置建议。</p></div>
+                <div class="flow-node green"><span class="num">3</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 9h16a6 6 0 0 1 0 12H16a6 6 0 0 1 0-12z"/><path d="M10 21v14c0 3.2 6.3 6 14 6s14-2.8 14-6V21"/><path d="M12 35h8"/><path d="M24 28v10"/><path d="M28 36h8"/></svg></span><h3>特征构建</h3><p>按“主机—目标”聚合日志，提取连接、域名、TLS 与时间行为特征。</p></div>
+                <div class="flow-node orange"><span class="num">4</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 7h18l5 5v29H13z"/><path d="M31 7v7h5"/><path d="M18 18h2"/><path d="M18 27h2"/><path d="M18 36h2"/><path d="M25 18h6"/><path d="M25 27h5"/><circle cx="34" cy="34" r="6"/><path d="m38 38 5 5"/></svg></span><h3>规则检测引擎</h3><p>基于周期、数据量、持续性和分布稳定性识别可疑 Beacon 与异常外联。</p></div>
+                <div class="flow-node purple"><span class="num">5</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 8a8 8 0 0 0-4 15 8 8 0 0 0 4 17"/><path d="M30 8a8 8 0 0 1 4 15 8 8 0 0 1-4 17"/><path d="M18 8v32"/><path d="M30 8v32"/><circle cx="21" cy="17" r="2"/><circle cx="27" cy="24" r="2"/><circle cx="21" cy="31" r="2"/><path d="M21 17h6v7h-6v7h6"/></svg></span><h3>LSTM 时序检测</h3><p>学习复杂时序模式，输出 Beacon 概率与风险等级。</p></div>
+                <div class="flow-node green"><span class="num">6</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 10h12v10H18z"/><path d="M10 26h12v12H10z"/><path d="M28 26h12v12H28z"/><path d="M24 20v6"/><path d="M16 26l8-6 8 6"/></svg></span><h3>威胁特征合并</h3><p>融合规则检测与 LSTM 输出，完成去重、增强与统一威胁表征。</p></div>
+                <div class="flow-node"><span class="num">7</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M16 8h16a6 6 0 0 1 0 12H16a6 6 0 0 1 0-12z"/><path d="M10 20v14c0 3.3 6.3 6 14 6s14-2.7 14-6V20"/><circle cx="33" cy="33" r="6"/><path d="m37 37 5 5"/></svg></span><h3>RAG 威胁溯源</h3><p>基于 ATT&amp;CK 知识库进行语义检索，输出 APT 匹配、技术关联与归因置信度。</p></div>
+                <div class="flow-node"><span class="num">8</span><span class="flow-icon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M13 6h19l6 6v30H13z"/><path d="M32 6v8h6"/><path d="M19 34v-7"/><path d="M25 34V20"/><path d="M31 34v-11"/><path d="M18 16h8"/></svg></span><h3>AI 综合研判 / 威胁报告</h3><p>融合检测结果与溯源结论，生成威胁概览、归因分析和处置建议。</p></div>
               </div>
               <div class="flow-feedback">结果反馈与模型 / 规则持续优化</div>
             </div>
@@ -605,7 +608,7 @@
           </div>
           <h1>四头八臂队</h1>
           <p class="subtitle">
-            四头八臂队来自华中科技大学网络空间安全学院，由张乾坤副教授指导。我们由四位女生组成，专注于网络对抗与 AI 安全交叉方向。
+            四头八臂队来自华中科技大学网络空间安全学院，由张乾坤老师指导。我们由四位女生组成，专注于网络对抗与 AI 安全交叉方向。
             针对传统检测手段难以捕获隐蔽 C2 信道的痛点，团队提出 C2Sherlock 系统：借助大模型的语义理解与行为推理能力，
             从海量流量中发现暗藏的"隐形指挥链"。我们兼具逻辑缜密性与技术韧性，致力于打造有温度、有精度、有深度的下一代安全检测体系。
           </p>
@@ -617,6 +620,20 @@
           <span>Forensics</span>
         </div>
       </div>
+
+      <article class="mentor-card">
+        <span class="mentor-avatar">张</span>
+        <div class="mentor-content">
+          <p class="mentor-role">指导老师</p>
+          <h2>张乾坤</h2>
+          <p>
+            华中科技大学网络空间安全学院副研究员、博士生导师、院长助理。主要研究方向包括理论计算机科学与可信人工智能，
+            聚焦算法设计、模型安全、公平性与鲁棒性。入选国家网信高层次人才、湖北省海外高层次人才等。在 STOC、CCS、ICML
+            等国际顶级会议与期刊发表论文十余篇，获 IEEE TrustCom 2025 最佳论文奖等荣誉。指导学生获“挑战杯”中国青年科技创新
+            “揭榜挂帅”人工智能领域主擂台赛全国特等奖、全国大学生物联网设计竞赛全国一等奖等。
+          </p>
+        </div>
+      </article>
 
       <div class="team-grid">
         <article class="member-card lead-member">
