@@ -199,7 +199,10 @@ class STIXParser:
     def build_rag_documents(self) -> list[dict]:
         """
         构建用于 RAG 的文档
-        每个 APT 组织生成一个富文本描述文档
+        每个 APT 组织使用的每个 C2 技术生成一个证据级文档。
+
+        这样检索粒度从“组织画像”变成“组织-技术证据”，避免短查询被某个
+        组织大文档吸附。检索阶段再按 group_id 聚合为组织候选。
         
         Returns:
             文档列表，每个文档包含 id, text, metadata
@@ -212,52 +215,48 @@ class STIXParser:
             if profile["c2_technique_count"] == 0:
                 continue
 
-            # 构建富文本描述
-            text_parts = [
-                f"组织名称: {profile['name']}",
-            ]
-
-            if profile["aliases"]:
-                text_parts.append(f"别名: {', '.join(profile['aliases'])}")
-
-            text_parts.append(f"\n组织描述:\n{profile['description']}")
-
-            # C2 相关技术详情
-            if profile["c2_techniques"]:
-                text_parts.append("\n使用的 C2 通信技术:")
-                for tech in profile["c2_techniques"]:
-                    text_parts.append(
-                        f"- {tech['technique_id']} {tech['name']}: "
-                        f"{tech['relationship_desc'] or tech['description'][:200]}"
-                    )
-
-            # 使用的工具
-            if profile["software"]:
-                text_parts.append("\n使用的恶意软件/工具:")
-                for sw in profile["software"][:10]:  # 限制数量
-                    text_parts.append(
-                        f"- {sw['name']} ({sw['type']}): "
-                        f"{sw['relationship_desc'][:150] if sw['relationship_desc'] else ''}"
-                    )
-            
             c2_tech_list = [f"{t['technique_id']}" for t in profile["c2_techniques"]]
             aliases_list = profile["aliases"] if profile["aliases"] else ["(none)"]
+            software_names = [sw["name"] for sw in profile["software"][:10]]
+            aliases_text = ", ".join(aliases_list)
+            software_text = ", ".join(software_names) if software_names else "(none)"
+            group_description = profile["description"][:700]
 
-            document = {
-                "id": group_id,
-                "text": "\n".join(text_parts),
-                "metadata": {
-                    "name": profile["name"],
-                    "aliases": aliases_list,
-                    "mitre_url": profile["mitre_url"],
-                    "technique_count": profile["technique_count"],
-                    "c2_technique_count": profile["c2_technique_count"],
-                    "c2_techniques": c2_tech_list,
-                },
-            }
-            documents.append(document)
+            for tech in profile["c2_techniques"]:
+                tech_id = tech["technique_id"] or "unknown"
+                relationship_desc = tech.get("relationship_desc", "")
+                evidence = relationship_desc or tech.get("description", "")
+                evidence = evidence[:900]
 
-        print(f"✓ 生成了 {len(documents)} 个 RAG 文档（C2 判定依据: kill_chain_phases 含 command-and-control）")
+                text_parts = [
+                    f"Group: {profile['name']}",
+                    f"Aliases: {aliases_text}",
+                    f"Technique: {tech_id} {tech['name']}",
+                    "Tactic: Command and Control",
+                    f"Evidence: {evidence}",
+                    f"Group description: {group_description}",
+                    f"Associated software/tools: {software_text}",
+                ]
+
+                document = {
+                    "id": f"{group_id}::{tech_id}",
+                    "text": "\n".join(text_parts),
+                    "metadata": {
+                        "document_type": "group_technique_evidence",
+                        "group_id": group_id,
+                        "name": profile["name"],
+                        "aliases": aliases_list,
+                        "mitre_url": profile["mitre_url"],
+                        "technique_id": tech_id,
+                        "technique_name": tech["name"],
+                        "technique_count": profile["technique_count"],
+                        "c2_technique_count": profile["c2_technique_count"],
+                        "c2_techniques": c2_tech_list,
+                    },
+                }
+                documents.append(document)
+
+        print(f"✓ 生成了 {len(documents)} 个 RAG 证据文档（粒度: 组织-技术，C2 判定依据: kill_chain_phases 含 command-and-control）")
         return documents
     
     @staticmethod

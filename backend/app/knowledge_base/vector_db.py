@@ -128,6 +128,7 @@ class VectorKnowledgeBase:
         query: str,
         top_k: int = 5,
         filter_metadata: dict[str, Any] | None = None,
+        group_by_apt: bool = True,
     ) -> list[dict]:
         """
         语义检索
@@ -153,22 +154,26 @@ class VectorKnowledgeBase:
         # 生成查询向量
         query_embedding = self.embedding_model.encode(query).tolist()
         
-        # 执行检索
+        # 执行检索。证据级知识库需要多取一些 chunk，再聚合成组织候选。
+        n_results = top_k
+        if group_by_apt:
+            n_results = min(max(top_k * 8, top_k), self.collection.count())
+
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=top_k,
+            n_results=n_results,
             where=filter_metadata,
             include=["metadatas", "documents", "distances"],
         )
         
         # 格式化结果
-        formatted_results = []
+        chunk_results = []
         for i in range(len(results["ids"][0])):
             distance = results["distances"][0][i]
             # 转换为相似度分数（ChromaDB 使用 L2 距离）
             score = 1 / (1 + distance)
             
-            formatted_results.append({
+            chunk_results.append({
                 "id": results["ids"][0][i],
                 "name": results["metadatas"][0][i].get("name", "Unknown"),
                 "distance": distance,
@@ -177,7 +182,86 @@ class VectorKnowledgeBase:
                 "text": results["documents"][0][i],
             })
         
-        return formatted_results
+        if not group_by_apt:
+            return chunk_results[:top_k]
+
+        return self._aggregate_evidence_chunks(chunk_results, top_k=top_k)
+
+    @staticmethod
+    def _aggregate_evidence_chunks(chunk_results: list[dict], top_k: int) -> list[dict]:
+        """Aggregate evidence-level retrieval hits into APT group candidates."""
+        grouped: dict[str, dict] = {}
+
+        for chunk in chunk_results:
+            metadata = chunk["metadata"]
+            group_key = metadata.get("group_id") or metadata.get("name") or chunk["id"]
+            technique_id = metadata.get("technique_id")
+
+            if group_key not in grouped:
+                grouped[group_key] = {
+                    "id": group_key,
+                    "name": chunk["name"],
+                    "distance": chunk["distance"],
+                    "score": chunk["score"],
+                    "metadata": {
+                        "name": chunk["name"],
+                        "aliases": metadata.get("aliases", []),
+                        "mitre_url": metadata.get("mitre_url", ""),
+                        "technique_count": metadata.get("technique_count", 0),
+                        "c2_technique_count": metadata.get("c2_technique_count", 0),
+                        "c2_techniques": [],
+                        "matched_techniques": [],
+                    },
+                    "text": chunk["text"],
+                    "evidence_chunks": [],
+                }
+
+            group = grouped[group_key]
+            group["distance"] = min(group["distance"], chunk["distance"])
+            group["score"] = max(group["score"], chunk["score"])
+            group["evidence_chunks"].append({
+                "id": chunk["id"],
+                "score": chunk["score"],
+                "distance": chunk["distance"],
+                "technique_id": technique_id,
+                "technique_name": metadata.get("technique_name", ""),
+                "text": chunk["text"],
+            })
+
+            for tech in metadata.get("c2_techniques", []) or []:
+                if tech not in group["metadata"]["c2_techniques"]:
+                    group["metadata"]["c2_techniques"].append(tech)
+            if technique_id and technique_id not in group["metadata"]["matched_techniques"]:
+                group["metadata"]["matched_techniques"].append(technique_id)
+
+        aggregated = []
+        for group in grouped.values():
+            evidence = sorted(
+                group["evidence_chunks"],
+                key=lambda item: item["score"],
+                reverse=True,
+            )
+            group["evidence_chunks"] = evidence[:5]
+
+            top_scores = [item["score"] for item in evidence[:3]]
+            if top_scores:
+                # Preserve the strongest evidence, with a small bonus for repeated
+                # independently retrieved technique evidence for the same group.
+                group["score"] = min(
+                    1.0,
+                    top_scores[0] + 0.03 * (len(top_scores) - 1),
+                )
+
+            group["metadata"]["matched_techniques"] = [
+                item["technique_id"]
+                for item in evidence
+                if item.get("technique_id")
+            ][:5]
+            group["text"] = evidence[0]["text"] if evidence else group["text"]
+            aggregated.append(group)
+
+        aggregated.sort(key=lambda item: item["score"], reverse=True)
+        return aggregated[:top_k]
     
     def get_stats(self) -> dict:
         """获取知识库统计信息"""

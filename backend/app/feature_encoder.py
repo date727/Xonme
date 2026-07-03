@@ -111,6 +111,36 @@ def encode_for_rag_query(feature: dict) -> str:
         RAG 查询文本
     """
     query_parts = []
+
+    # C2-focused behavioral signals from Zeek/UWF aggregation.
+    if feature.get("c2_score", 0) >= 50:
+        query_parts.append("suspected command and control communication")
+
+    service = str(feature.get("service", "")).lower()
+    protocol = str(feature.get("protocol", "")).lower()
+    conn_state = str(feature.get("conn_state", ""))
+    connection_count = feature.get("connection_count", 0) or feature.get("conn_count", 0)
+    avg_interval = feature.get("avg_interval", 0) or 0
+    total_bytes = feature.get("total_bytes", 0) or 0
+
+    if service == "dns" or str(feature.get("dst_port", "")) == "53":
+        query_parts.append("DNS based command and control")
+        query_parts.append("dynamic DNS resolution or DNS calculation")
+
+    if protocol:
+        query_parts.append(f"{protocol.upper()} protocol traffic")
+
+    if connection_count and connection_count >= 20:
+        query_parts.append("repeated low volume network connections")
+
+    if avg_interval and 1 <= avg_interval <= 3600 and connection_count >= 10:
+        query_parts.append("periodic beacon interval")
+
+    if connection_count and total_bytes and total_bytes / max(connection_count, 1) <= 800:
+        query_parts.append("small payload heartbeat traffic")
+
+    if conn_state in {"S0", "REJ", "RSTO", "RSTR"}:
+        query_parts.append(f"connection state {conn_state}")
     
     # 检测类型（使用 RITA 官方 "medium" 阈值）
     if feature.get("beacon_score", 0) >= 90:  # medium threshold
