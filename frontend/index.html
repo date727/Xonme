@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C2Sherlock 可视化分析平台</title>
-  <link rel="stylesheet" href="styles.css?v=20260702" />
+  <link rel="stylesheet" href="styles.css?v=20260703" />
 </head>
 <body>
   <header class="topbar">
@@ -234,6 +234,8 @@
             <button class="chip" data-api="http://218.244.140.250:8765">局域网示例</button>
           </div>
           <p class="request-line">当前请求：<code id="current-endpoint">http://127.0.0.1:8765/analyze/stream</code></p>
+
+          <div id="case-recommendation" class="case-recommendation" hidden></div>
 
           <div id="drop-zone" class="drop-zone">
             <div class="drop-content">
@@ -600,22 +602,36 @@
         <p>系统优势、历史样例表格和案例解释。</p>
       </div>
 
-      <div class="advantage-grid">
-        <article class="feature-card">
-          <h3>多源证据融合</h3>
-          <p>相比单一规则，系统综合时间规律、流量统计、模型概率和语义研判，降低误报。</p>
-        </article>
-        <article class="feature-card">
-          <h3>面向分析师输出</h3>
-          <p>不只返回风险分数，还提供可读解释、溯源线索和处置建议，便于比赛展示与复核。</p>
-        </article>
-        <article class="feature-card">
-          <h3>部署灵活</h3>
-          <p>前端可调用本机、虚拟机或同学电脑后端，适合现场演示和多人协作调试。</p>
-        </article>
-      </div>
+      <section class="panel capability-module">
+        <div class="panel-title compact">
+          <h2>核心创新点</h2>
+          <p>围绕隐蔽 C2 检测、溯源与研判的四项关键能力。</p>
+        </div>
+        <div class="advantage-grid">
+          <article class="feature-card">
+            <span class="feature-icon">01</span>
+            <h3>内容无关检测</h3>
+            <p>不依赖载荷、黑名单或特征码，仅凭连接行为发现隐蔽 C2。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon mint">02</span>
+            <h3>双引擎协同检测</h3>
+            <p>规则筛查典型 Beacon，LSTM 捕捉抖动、低频与弱周期异常。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon cyan">03</span>
+            <h3>溯源分析延伸</h3>
+            <p>从异常告警走向 ATT&amp;CK 映射、APT 候选与归因线索输出。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon blue">04</span>
+            <h3>可解释智能研判</h3>
+            <p>生成威胁概览、重点连接解释与处置建议，而不止风险分数。</p>
+          </article>
+        </div>
+      </section>
 
-      <section class="panel">
+      <section class="panel capability-module">
         <div class="panel-title compact">
           <h2>案例库 / 历史样例展示</h2>
           <p>当前为 mock 数据，后续可替换为真实后端分析记录。</p>
@@ -638,21 +654,21 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel capability-module">
         <div class="panel-title compact">
           <h2>案例解释</h2>
-          <p>以大模型报告风格展示正常样例与恶意样例的差异。</p>
+          <p>本区域提供典型正常与恶意案例说明，支持下载样本文件并进入检测中心进行分析验证。</p>
         </div>
         <div class="case-compare">
-          <article class="explain-card benign">
+          <article class="explain-card benign" data-case="benign5_smashburger">
             <span>正常样例</span>
-            <h3>CDN / 软件更新访问</h3>
-            <p>该流量主要表现为浏览器或客户端访问 CDN 节点，连接目标常见，数据量与时间间隔存在自然波动。虽然可能出现短时间重复请求，但周期性弱、目标信誉较高，综合风险低。</p>
+            <h3>商业域名访问 / 低风险周期请求</h3>
+            <p>该流量主要表现为主机访问正常商业域名，虽然存在一定周期性外联特征，但目标信誉较高，且未出现 DNS 隧道、长连接异常或威胁情报命中。综合来看，更接近浏览器后台访问、应用更新检测或其他低风险自动化请求，整体风险较低。</p>
           </article>
-          <article class="explain-card malicious">
+          <article class="explain-card malicious" data-case="cs4_amazon_http">
             <span>恶意样例</span>
-            <h3>周期性 Beacon 与异常目标</h3>
-            <p>样例中主机持续访问低信誉目标，连接间隔稳定，部分请求数据量高度接近，并伴随长连接或异常 DNS 行为。系统将其归为高风险外联，建议隔离主机、封禁目标并保留 PCAP 与日志证据。</p>
+            <h3>周期性 Beacon 与异常控制目标</h3>
+            <p>该样例中主机与内网目标之间建立了高置信度 HTTP Beacon 通信，连接模式呈现明显的自动化控制特征，并伴随异常 User-Agent 与可疑横向控制迹象。系统将其判定为高风险 C2 外联，建议立即隔离主机、阻断连接并保留取证证据。</p>
           </article>
         </div>
       </section>
@@ -732,6 +748,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"></script>
-  <script src="app.js?v=20260702"></script>
+  <div id="case-toast" class="case-toast" hidden></div>
+  <script src="app.js?v=20260703"></script>
 </body>
 </html>

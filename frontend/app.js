@@ -50,12 +50,27 @@ const caseTableBody = $("#case-table-body");
 const reportFormat = $("#report-format");
 const downloadReportBtn = $("#download-report-btn");
 const printReportBtn = $("#print-report-btn");
+const caseRecommendation = $("#case-recommendation");
+const caseToast = $("#case-toast");
 
 let selectedFile = null;
 let analysisRunning = false;
 let currentStep = null;
 let latestReportMarkdown = "";
 let activeController = null;
+
+const caseExamples = {
+  benign5_smashburger: {
+    id: "benign5_smashburger",
+    fileName: "benign5_smashburger.pcapng",
+    samplePath: "public/examples/benign5_smashburger.pcapng",
+  },
+  cs4_amazon_http: {
+    id: "cs4_amazon_http",
+    fileName: "cs4_amazon_http.pcapng",
+    samplePath: "public/examples/cs4_amazon_http.pcapng",
+  },
+};
 
 const stepOrder = ["zeek", "rita", "lstm", "rag", "ai"];
 const stepLabels = {
@@ -170,71 +185,211 @@ const markdownToPlainText = (markdown) =>
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-const toUtf16Hex = (text) =>
-  Array.from(text)
-    .map((char) => {
-      const code = char.codePointAt(0);
-      if (code > 0xffff) {
-        const high = Math.floor((code - 0x10000) / 0x400) + 0xd800;
-        const low = ((code - 0x10000) % 0x400) + 0xdc00;
-        return [high, low].map((item) => item.toString(16).padStart(4, "0")).join("");
-      }
-      return code.toString(16).padStart(4, "0");
-    })
-    .join("");
+const cleanMarkdownInline = (text) =>
+  text
+    .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .trim();
 
-const wrapText = (text, maxChars = 48) => {
-  const lines = [];
-  text.split("\n").forEach((paragraph) => {
-    const source = paragraph.trimEnd();
-    if (!source) {
-      lines.push("");
+const normalizePdfText = (text) =>
+  cleanMarkdownInline(text)
+    .replace(/[‐‑‒–—―]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/→/g, "->")
+    .replace(/←/g, "<-")
+    .replace(/≥/g, ">=")
+    .replace(/≤/g, "<=")
+    .replace(/≈/g, "~")
+    .replace(/·/g, "-")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
+    .replace(/[^\x09\x0a\x0d\x20-\x7e]/g, "");
+
+const pdfEscape = (text) => normalizePdfText(text).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+const markdownToPdfBlocks = (markdown) => {
+  const blocks = [{ type: "title", text: "C2Sherlock Analysis Report" }];
+  const lines = normalizeMarkdown(markdown).split("\n");
+  let paragraph = [];
+
+  const flushParagraph = () => {
+    const text = normalizePdfText(paragraph.join(" "));
+    if (text) blocks.push({ type: "paragraph", text });
+    paragraph = [];
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
       return;
     }
-    let line = "";
-    source.split(/(\s+)/).forEach((part) => {
-      if (!part) return;
-      if ((line + part).length > maxChars && line.trim()) {
-        lines.push(line.trimEnd());
-        line = part.trimStart();
-      } else {
-        line += part;
-      }
-      while (line.length > maxChars) {
-        lines.push(line.slice(0, maxChars));
-        line = line.slice(maxChars);
-      }
-    });
-    if (line.trim()) lines.push(line.trimEnd());
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      blocks.push({ type: `h${Math.min(heading[1].length, 3)}`, text: normalizePdfText(heading[2]) });
+      return;
+    }
+
+    const bullet = line.match(/^[-*+]\s+(.+)$/);
+    if (bullet) {
+      flushParagraph();
+      blocks.push({ type: "bullet", text: normalizePdfText(bullet[1]) });
+      return;
+    }
+
+    const numbered = line.match(/^(\d+)[.)]\s+(.+)$/);
+    if (numbered) {
+      flushParagraph();
+      blocks.push({ type: "numbered", marker: `${numbered[1]}.`, text: normalizePdfText(numbered[2]) });
+      return;
+    }
+
+    if (/^\|.+\|$/.test(line)) {
+      flushParagraph();
+      const cells = line.split("|").map((cell) => normalizePdfText(cell)).filter(Boolean);
+      if (cells.length) blocks.push({ type: "paragraph", text: cells.join("  |  ") });
+      return;
+    }
+
+    paragraph.push(line);
   });
+
+  flushParagraph();
+  return blocks;
+};
+
+const getTextMeasurer = () => {
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  return (text, fontSize, fontFamily = "Helvetica") => {
+    if (context) {
+      context.font = `${fontSize}px ${fontFamily}, Arial, sans-serif`;
+      return context.measureText(text).width * 0.74;
+    }
+    return text.length * fontSize * 0.52;
+  };
+};
+
+const wrapPdfText = (text, maxWidth, fontSize, fontFamily, measureText) => {
+  const words = normalizePdfText(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+
+  words.forEach((word) => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && measureText(candidate, fontSize, fontFamily) > maxWidth) {
+      lines.push(line);
+      line = word;
+      while (measureText(line, fontSize, fontFamily) > maxWidth && line.length > 1) {
+        let cut = line.length - 1;
+        while (cut > 1 && measureText(`${line.slice(0, cut)}-`, fontSize, fontFamily) > maxWidth) cut -= 1;
+        lines.push(`${line.slice(0, cut)}-`);
+        line = line.slice(cut);
+      }
+    } else {
+      line = candidate;
+    }
+  });
+
+  if (line) lines.push(line);
   return lines;
 };
 
 const createPdfBlob = (markdown) => {
-  const lines = wrapText(`C2Sherlock Analysis Report\n\n${markdownToPlainText(markdown)}`);
-  const pages = [];
-  const linesPerPage = 36;
-  for (let index = 0; index < lines.length; index += linesPerPage) {
-    pages.push(lines.slice(index, index + linesPerPage));
-  }
+  const pageWidth = 595;
+  const pageHeight = 842;
+  const marginX = 54;
+  const marginTop = 64;
+  const marginBottom = 58;
+  const contentWidth = pageWidth - marginX * 2;
+  const green = "0.02 0.31 0.23";
+  const ink = "0.06 0.09 0.16";
+  const muted = "0.39 0.45 0.55";
+  const measureText = getTextMeasurer();
+  const pages = [[]];
+  let y = pageHeight - marginTop;
 
+  const currentPage = () => pages[pages.length - 1];
+  const newPage = () => {
+    pages.push([]);
+    y = pageHeight - marginTop;
+  };
+  const ensureSpace = (height) => {
+    if (y - height < marginBottom) newPage();
+  };
+  const drawLine = (text, x, font, size, color) => {
+    currentPage().push(`BT /${font} ${size} Tf ${color} rg 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${pdfEscape(text)}) Tj ET`);
+  };
+  const drawRule = () => {
+    currentPage().push(`q 0.83 0.89 0.93 RG 0.8 w ${marginX} ${y.toFixed(2)} m ${pageWidth - marginX} ${y.toFixed(2)} l S Q`);
+  };
+
+  markdownToPdfBlocks(markdown).forEach((block) => {
+    if (!block.text) return;
+
+    if (block.type === "title") {
+      ensureSpace(54);
+      drawLine(block.text, marginX, "F2", 24, green);
+      y -= 18;
+      drawRule();
+      y -= 28;
+      return;
+    }
+
+    const styleMap = {
+      h1: { font: "F2", size: 22, color: green, before: 8, after: 15, lineHeight: 28 },
+      h2: { font: "F2", size: 17, color: green, before: 12, after: 12, lineHeight: 22 },
+      h3: { font: "F2", size: 13.5, color: green, before: 8, after: 8, lineHeight: 18 },
+      paragraph: { font: "F1", size: 11.5, color: ink, before: 0, after: 12, lineHeight: 17 },
+      bullet: { font: "F1", size: 11.5, color: ink, before: 0, after: 8, lineHeight: 17 },
+      numbered: { font: "F1", size: 11.5, color: ink, before: 0, after: 8, lineHeight: 17 },
+    };
+    const style = styleMap[block.type] || styleMap.paragraph;
+    const indent = block.type === "bullet" || block.type === "numbered" ? 24 : 0;
+    const marker = block.type === "bullet" ? "-" : block.type === "numbered" ? block.marker : "";
+    const markerWidth = marker ? 18 : 0;
+    const lines = wrapPdfText(block.text, contentWidth - indent - markerWidth, style.size, style.font === "F2" ? "Helvetica-Bold" : "Helvetica", measureText);
+    const blockHeight = style.before + lines.length * style.lineHeight + style.after;
+
+    ensureSpace(blockHeight);
+    y -= style.before;
+    lines.forEach((line, lineIndex) => {
+      if (marker && lineIndex === 0) drawLine(marker, marginX + indent, "F2", style.size, style.color);
+      drawLine(line, marginX + indent + markerWidth, style.font, style.size, style.color);
+      y -= style.lineHeight;
+    });
+    y -= style.after;
+  });
+
+  pages.forEach((page, index) => {
+    page.push(`BT /F1 9 Tf ${muted} rg 1 0 0 1 ${marginX} 32 Tm (C2Sherlock Analysis Report) Tj ET`);
+    page.push(`BT /F1 9 Tf ${muted} rg 1 0 0 1 ${pageWidth - marginX - 42} 32 Tm (Page ${index + 1}) Tj ET`);
+  });
+
+  const pageObjectsStart = 3;
+  const fontObjectStart = pageObjectsStart + pages.length * 2;
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    `<< /Type /Pages /Kids [${pages.map((_, index) => `${3 + index * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`,
+    `<< /Type /Pages /Kids [${pages.map((_, index) => `${pageObjectsStart + index * 2} 0 R`).join(" ")}] /Count ${pages.length} >>`,
   ];
 
-  pages.forEach((pageLines, index) => {
-    const pageObject = 3 + index * 2;
+  pages.forEach((pageOps, index) => {
+    const pageObject = pageObjectsStart + index * 2;
     const contentObject = pageObject + 1;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 ${3 + pages.length * 2} 0 R >> >> /Contents ${contentObject} 0 R >>`);
-    const textOps = pageLines
-      .map((line, lineIndex) => `1 0 0 1 50 ${790 - lineIndex * 20} Tm <${toUtf16Hex(line)}> Tj`)
-      .join("\n");
-    const stream = `BT\n/F1 11 Tf\n${textOps}\nET`;
+    const stream = pageOps.join("\n");
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObjectStart} 0 R /F2 ${fontObjectStart + 1} 0 R >> >> /Contents ${contentObject} 0 R >>`);
     objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
 
-  objects.push("<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /UniGB-UCS2-H /DescendantFonts [ << /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 2 >> /FontDescriptor << /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >> >> ] >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
 
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
@@ -320,7 +475,27 @@ const preventDefaults = (event) => {
   event.stopPropagation();
 };
 
-const switchTab = (tabName) => {
+const getHashState = () => {
+  const rawHash = window.location.hash.replace(/^#/, "");
+  const [tab = "", query = ""] = rawHash.split("?");
+  return {
+    tab: tab || "home",
+    params: new URLSearchParams(query),
+  };
+};
+
+const getCurrentCaseId = () => {
+  const fromSearch = new URLSearchParams(window.location.search).get("case");
+  if (fromSearch) return fromSearch;
+  return getHashState().params.get("case");
+};
+
+const buildTabHash = (tabName, params = new URLSearchParams()) => {
+  const query = params.toString();
+  return `#${tabName}${query ? `?${query}` : ""}`;
+};
+
+const switchTab = (tabName, options = {}) => {
   $$(".nav-btn").forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === tabName);
   });
@@ -328,8 +503,11 @@ const switchTab = (tabName) => {
     page.classList.toggle("active", page.dataset.page === tabName);
   });
   if (history.replaceState) {
-    history.replaceState(null, "", `#${tabName}`);
+    const params = options.params || new URLSearchParams();
+    const method = options.push ? "pushState" : "replaceState";
+    history[method](null, "", buildTabHash(tabName, params));
   }
+  renderCaseRecommendation();
 };
 
 const setupTabs = () => {
@@ -342,8 +520,13 @@ const setupTabs = () => {
       switchTab(link.dataset.tabLink);
     });
   });
-  const initial = window.location.hash.replace("#", "") || "home";
-  if ($(`[data-page="${initial}"]`)) switchTab(initial);
+  const hashState = getHashState();
+  const initial = window.location.pathname.replace(/\/+$/, "").endsWith("/analyze") ? "tool" : hashState.tab;
+  switchTab($(`[data-page="${initial}"]`) ? initial : "home", { params: hashState.params });
+  window.addEventListener("popstate", () => {
+    const state = getHashState();
+    switchTab($(`[data-page="${state.tab}"]`) ? state.tab : "home", { params: state.params });
+  });
 };
 
 const setupPrincipleTabs = () => {
@@ -357,6 +540,98 @@ const setupPrincipleTabs = () => {
       });
       activeSection?.scrollIntoView({ block: "start", behavior: "smooth" });
     });
+  });
+};
+
+const goToAnalyzeCase = (caseId) => {
+  const params = new URLSearchParams();
+  params.set("case", caseId);
+  switchTab("tool", { params, push: true });
+  document.getElementById("tool")?.scrollIntoView({ block: "start", behavior: "smooth" });
+};
+
+const downloadCaseSample = (item) => {
+  const link = document.createElement("a");
+  link.href = item.samplePath;
+  link.download = item.fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showCaseToast(item.id);
+};
+
+const showCaseToast = (caseId) => {
+  if (!caseToast) return;
+  caseToast.hidden = false;
+  caseToast.innerHTML = `
+    <div>
+      <strong>样本已开始下载。</strong>
+      <p>你可以前往检测中心上传该文件，体验完整分析流程。</p>
+    </div>
+    <div class="case-toast-actions">
+      <button class="secondary" type="button" data-toast-close>留在当前页</button>
+      <button class="primary" type="button" data-toast-analyze="${caseId}">前往检测中心</button>
+    </div>
+  `;
+};
+
+const hideCaseToast = () => {
+  if (caseToast) caseToast.hidden = true;
+};
+
+const renderCaseRecommendation = () => {
+  if (!caseRecommendation) return;
+  const caseId = getCurrentCaseId();
+  const item = caseId ? caseExamples[caseId] : null;
+  if (!item) {
+    caseRecommendation.hidden = true;
+    caseRecommendation.innerHTML = "";
+    return;
+  }
+  caseRecommendation.hidden = false;
+  caseRecommendation.innerHTML = `
+    <strong>当前推荐分析样本：${item.fileName}</strong>
+    <span>请先在能力页下载该样本文件，再在下方上传并开始分析。</span>
+  `;
+};
+
+const setupCaseExamples = () => {
+  $$(".explain-card[data-case]").forEach((card) => {
+    const item = caseExamples[card.dataset.case];
+    if (!item) return;
+    const actions = document.createElement("div");
+    actions.className = "case-card-actions";
+    actions.innerHTML = `
+      <button class="primary" type="button" data-case-analyze="${item.id}">去检测中心分析</button>
+      <button class="secondary" type="button" data-case-download="${item.id}">下载样本</button>
+    `;
+    card.appendChild(actions);
+  });
+
+  document.addEventListener("click", (event) => {
+    const analyze = event.target.closest("[data-case-analyze]");
+    if (analyze) {
+      goToAnalyzeCase(analyze.dataset.caseAnalyze);
+      return;
+    }
+
+    const download = event.target.closest("[data-case-download]");
+    if (download) {
+      const item = caseExamples[download.dataset.caseDownload];
+      if (item) downloadCaseSample(item);
+      return;
+    }
+
+    if (event.target.closest("[data-toast-close]")) {
+      hideCaseToast();
+      return;
+    }
+
+    const toastAnalyze = event.target.closest("[data-toast-analyze]");
+    if (toastAnalyze) {
+      hideCaseToast();
+      goToAnalyzeCase(toastAnalyze.dataset.toastAnalyze);
+    }
   });
 };
 
@@ -591,6 +866,7 @@ setupTabs();
 setupPrincipleTabs();
 setupApiConfig();
 setupUpload();
+setupCaseExamples();
 renderCaseTable();
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
 cancelBtn?.addEventListener("click", cancelAnalysis);
