@@ -8,4 +8,5 @@ backend/chroma_db
 backend/local_models
 attack-stix-data
 *.csv
+pcap
 .DS_Store
