@@ -809,43 +809,47 @@ const renderCaseTable = () => {
   const cases = [
     {
       no: 1,
-      pcap: "benign_cdn_update.pcap",
-      src: "10.0.3.21",
-      dst: "cdn.example.net",
-      time: "2026-06-29 10:15",
-      status: "低风险 12%",
+      pcap: "benign5_smashburger.pcap",
+      src: "192.168.46.84",
+      dst: "smashburger.com",
+      time: "2026-07-03 12:54",
+      status: "正常",
+      score: 35,
       type: "low",
-      note: "软件更新与 CDN 访问，周期性弱。",
+      note: "商业域名访问，存在轻微Beacon行为，无威胁情报命中。",
     },
     {
       no: 2,
-      pcap: "cs2_dns_default_with_amazon.pcap",
-      src: "192.168.56.104",
-      dst: "45.77.***.21",
-      time: "2026-06-29 11:08",
-      status: "高风险 91%",
+      pcap: "cs2_amazon_https.pcap",
+      src: "192.168.56.5",
+      dst: "192.168.56.4:443",
+      time: "2026-07-03 13:01",
+      status: "高危",
+      score: 95,
       type: "high",
-      note: "稳定 Beacon 间隔，目标异常。",
+      note: "HTTPS周期性Beacon通信，疑似APT3相关C2活动。",
     },
     {
       no: 3,
-      pcap: "office_login_noise.pcapng",
-      src: "10.0.8.45",
-      dst: "login.microsoftonline.com",
-      time: "2026-06-29 13:22",
-      status: "低风险 18%",
-      type: "low",
-      note: "认证流量正常，连接分布不稳定。",
+      pcap: "cs2_jquery_http.pcap",
+      src: "192.168.56.5",
+      dst: "192.168.56.4:80",
+      time: "2026-06-30 15:38",
+      status: "高危",
+      score: 92,
+      type: "high",
+      note: "HTTP异常连接及可疑参数，存在明显数据外传风险。",
     },
     {
       no: 4,
-      pcap: "dns_tunnel_suspect.pcap",
-      src: "172.16.4.9",
-      dst: "x9a-control.example",
-      time: "2026-06-29 15:46",
-      status: "高风险 86%",
+      pcap: "cs4_amazon_http.pcap",
+      src: "192.168.56.5",
+      dst: "192.168.56.4:80",
+      time: "2026-07-03 12:58",
+      status: "高危",
+      score: 100,
       type: "high",
-      note: "DNS 子域异常且请求频率稳定。",
+      note: "高置信度Beacon通信，匹配APT18攻击特征，建议立即处置。",
     },
   ];
 
@@ -857,6 +861,7 @@ const renderCaseTable = () => {
       <td>${item.dst}</td>
       <td>${item.time}</td>
       <td><span class="status-pill status-${item.type}">${item.status}</span></td>
+      <td>${item.score}</td>
       <td>${item.note}</td>
     </tr>
   `).join("");
