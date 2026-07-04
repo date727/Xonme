@@ -406,39 +406,60 @@ const createPdfBlob = (markdown) => {
   return new Blob([pdf], { type: "application/pdf" });
 };
 
-const createReportHtml = () => `<!doctype html>
+const createReportHtml = (markdown = latestReportMarkdown) => `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>C2Sherlock 分析报告</title>
+  <title>C2Sherlock AI分析报告</title>
   <style>
+    @page { margin: 16mm 14mm; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #0f172a; line-height: 1.75; padding: 32px; }
     h1, h2, h3 { color: #064e3b; line-height: 1.35; }
     table { border-collapse: collapse; width: 100%; margin: 16px 0; }
     th, td { border: 1px solid #d8e4ed; padding: 8px 10px; text-align: left; }
     th { background: #ecfdf5; }
     pre, code { font-family: Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+    img { max-width: 100%; }
+    @media print {
+      body { padding: 0; }
+    }
   </style>
 </head>
 <body>
-  <h1>C2Sherlock 分析报告</h1>
-  ${renderMarkdown(latestReportMarkdown)}
+  ${renderMarkdown(markdown)}
 </body>
 </html>`;
 
-const printReport = () => {
+const openReportWindow = (markdown = latestReportMarkdown, callback) => {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
     setStatus("浏览器拦截了打印窗口，请允许弹窗后重试。", true);
-    return;
+    return null;
   }
   printWindow.document.open();
-  printWindow.document.write(createReportHtml());
+  printWindow.document.write(createReportHtml(markdown));
   printWindow.document.close();
   window.setTimeout(() => {
+    callback?.(printWindow);
+  }, 200);
+  return printWindow;
+};
+
+const printReport = () => {
+  openReportWindow(latestReportMarkdown, (printWindow) => {
     printWindow.focus();
     printWindow.print();
-  }, 200);
+  });
+};
+
+const exportReportAsPdf = () => {
+  const printWindow = openReportWindow(latestReportMarkdown, (openedWindow) => {
+    openedWindow.focus();
+    openedWindow.print();
+  });
+  if (printWindow) {
+    setStatus('已打开报告打印窗口，请在打印对话框中选择“另存为 PDF”。');
+  }
 };
 
 const downloadReport = () => {
@@ -456,11 +477,11 @@ const downloadReport = () => {
   }
 
   if (format === "doc") {
-    downloadBlob(new Blob([createReportHtml()], { type: "application/msword;charset=utf-8" }), `${baseName}.doc`);
+    downloadBlob(new Blob([createReportHtml(latestReportMarkdown)], { type: "application/msword;charset=utf-8" }), `${baseName}.doc`);
     return;
   }
 
-  downloadBlob(createPdfBlob(latestReportMarkdown), `${baseName}.pdf`);
+  exportReportAsPdf();
 };
 
 const cancelAnalysis = () => {
