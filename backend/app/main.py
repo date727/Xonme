@@ -157,28 +157,33 @@ def generate_ai_analysis(
     source = "RITA CSV report" if rita_ok else "Zeek network log data"
 
     # System prompt
-    system_prompt = "You are a senior threat intelligence analyst. Provide thorough, well-structured analysis in Markdown."
+    system_prompt = (
+        "你是一名资深网络威胁情报分析师。"
+        "请始终使用中文进行分析，并以结构清晰的 Markdown 输出专业报告。"
+    )
 
     # User prompt — base
     prompt = (
-        f"Review the following {source} and produce a comprehensive report with these sections:\n"
-        "1. **Executive Summary** — high-level findings in 2-3 sentences\n"
-        "2. **Key Threats Identified** — notable C2 behaviors, beaconing patterns, anomalies\n"
-        "3. **Risk Assessment** — severity and potential impact\n"
-        "4. **Recommended Actions** — concrete next steps for the SOC team\n\n"
+        "请输出一份中文 Markdown 报告，且第一行标题必须严格为："
+        "# C2Sherlock AI分析报告\n\n"
+        f"请分析以下{source}，并按下面结构组织内容：\n"
+        "1. **执行摘要** - 用 2-3 句话概括核心发现\n"
+        "2. **主要威胁特征** - 说明可疑 C2 行为、Beacon 特征、异常现象\n"
+        "3. **风险评估** - 说明严重性、潜在影响与业务风险\n"
+        "4. **处置建议** - 给出面向 SOC 团队的具体下一步措施\n\n"
     )
 
     # Inject RAG attribution context into the prompt when available
     if rag_context:
         prompt += (
             "---\n"
-            "**ATT&CK Context for Attribution** (use this to enrich your analysis):\n"
+            "**ATT&CK 溯源上下文**（请将其用于丰富你的分析）：\n"
             f"{rag_context}\n"
             "---\n\n"
-            "In your report, add a section **5. Threat Attribution** that:\n"
-            "- Names the most likely APT group(s) based on TTP overlap\n"
-            "- Cites the matched MITRE ATT&CK techniques\n"
-            "- Notes your confidence level and any caveats\n\n"
+            "请在报告中新增第 5 节 **威胁归因**，要求：\n"
+            "- 说明最可能的 APT 组织或组织集合，并给出判断依据\n"
+            "- 引用匹配到的 MITRE ATT&CK 技术编号\n"
+            "- 说明你的置信度以及需要保留的 caveat\n\n"
         )
 
     # Augment with LSTM results
