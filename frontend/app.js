@@ -281,18 +281,26 @@ const wrapPdfText = (text, maxWidth, fontSize, fontFamily, measureText) => {
   const words = normalizePdfText(text).split(/\s+/).filter(Boolean);
   const lines = [];
   let line = "";
+  const safeMaxWidth = maxWidth * 0.96;
+
+  const pushWrappedWord = (word) => {
+    let rest = word;
+    while (measureText(rest, fontSize, fontFamily) > safeMaxWidth && rest.length > 1) {
+      let cut = rest.length - 1;
+      while (cut > 1 && measureText(`${rest.slice(0, cut)}-`, fontSize, fontFamily) > safeMaxWidth) cut -= 1;
+      lines.push(`${rest.slice(0, cut)}-`);
+      rest = rest.slice(cut);
+    }
+    line = rest;
+  };
 
   words.forEach((word) => {
     const candidate = line ? `${line} ${word}` : word;
-    if (line && measureText(candidate, fontSize, fontFamily) > maxWidth) {
+    if (line && measureText(candidate, fontSize, fontFamily) > safeMaxWidth) {
       lines.push(line);
-      line = word;
-      while (measureText(line, fontSize, fontFamily) > maxWidth && line.length > 1) {
-        let cut = line.length - 1;
-        while (cut > 1 && measureText(`${line.slice(0, cut)}-`, fontSize, fontFamily) > maxWidth) cut -= 1;
-        lines.push(`${line.slice(0, cut)}-`);
-        line = line.slice(cut);
-      }
+      pushWrappedWord(word);
+    } else if (!line && measureText(candidate, fontSize, fontFamily) > safeMaxWidth) {
+      pushWrappedWord(word);
     } else {
       line = candidate;
     }
@@ -308,6 +316,7 @@ const createPdfBlob = (markdown) => {
   const marginX = 54;
   const marginTop = 64;
   const marginBottom = 58;
+  const bottomSafety = 8;
   const contentWidth = pageWidth - marginX * 2;
   const green = "0.02 0.31 0.23";
   const ink = "0.06 0.09 0.16";
@@ -322,7 +331,7 @@ const createPdfBlob = (markdown) => {
     y = pageHeight - marginTop;
   };
   const ensureSpace = (height) => {
-    if (y - height < marginBottom) newPage();
+    if (y - height < marginBottom + bottomSafety) newPage();
   };
   const drawLine = (text, x, font, size, color) => {
     currentPage().push(`BT /${font} ${size} Tf ${color} rg 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${pdfEscape(text)}) Tj ET`);
@@ -357,10 +366,16 @@ const createPdfBlob = (markdown) => {
     const markerWidth = marker ? 18 : 0;
     const lines = wrapPdfText(block.text, contentWidth - indent - markerWidth, style.size, style.font === "F2" ? "Helvetica-Bold" : "Helvetica", measureText);
     const blockHeight = style.before + lines.length * style.lineHeight + style.after;
+    const pageContentHeight = pageHeight - marginTop - marginBottom - bottomSafety;
 
-    ensureSpace(blockHeight);
+    if (blockHeight <= pageContentHeight) {
+      ensureSpace(blockHeight);
+    } else {
+      ensureSpace(style.before + style.lineHeight);
+    }
     y -= style.before;
     lines.forEach((line, lineIndex) => {
+      ensureSpace(style.lineHeight + (lineIndex === lines.length - 1 ? style.after : 0));
       if (marker && lineIndex === 0) drawLine(marker, marginX + indent, "F2", style.size, style.color);
       drawLine(line, marginX + indent + markerWidth, style.font, style.size, style.color);
       y -= style.lineHeight;
