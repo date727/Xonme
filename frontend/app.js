@@ -725,6 +725,13 @@ const handleStreamEvent = (eventName, data) => {
     return;
   }
 
+  if (eventName === "delta") {
+    const payload = JSON.parse(data);
+    latestReportMarkdown += payload.content || "";
+    resultEl.innerHTML = renderMarkdown(latestReportMarkdown);
+    return;
+  }
+
   if (eventName === "result") {
     const payload = JSON.parse(data);
     const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
@@ -781,7 +788,7 @@ const analyzeSelectedFile = async () => {
   setStatus("正在上传样本，请勿关闭页面。切换栏目不会中断当前分析。");
   latestReportMarkdown = "";
   setReportDownloadEnabled(false);
-  resultEl.textContent = "分析任务运行中...";
+  resultEl.textContent = "分析任务运行中，报告将实时显示...";
   resetSteps();
 
   const formData = new FormData();
