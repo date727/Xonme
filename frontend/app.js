@@ -812,7 +812,7 @@ const analyzeSelectedFile = async () => {
     }
 
     const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder("utf-8");
     const streamState = { buffer: "" };
 
     while (true) {

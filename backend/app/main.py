@@ -269,11 +269,15 @@ def stream_ai_analysis(
         raise HTTPException(status_code=502, detail="SiliconFlow API request failed") from exc
 
     try:
-        for raw_line in response.iter_lines(decode_unicode=True):
+        response.encoding = "utf-8"
+        for raw_line in response.iter_lines(chunk_size=1, decode_unicode=False):
             if not raw_line:
                 continue
 
-            line = raw_line.strip()
+            try:
+                line = raw_line.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                line = raw_line.decode("utf-8", errors="replace").strip()
             if not line.startswith("data:"):
                 continue
 
@@ -609,4 +613,12 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
         except HTTPException as exc:
             yield sse_event("error", exc.detail)
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
