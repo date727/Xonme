@@ -365,16 +365,16 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     lstm_results = None
     if _LSTM_AVAILABLE:
         try:
-            from app.zeek_to_lstm_converter import export_lstm_features_from_zeek
+            from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
 
-            print("LSTM: extracting HTTP/HTTPS features from Zeek conn.log")
-            lstm_csv_text = export_lstm_features_from_zeek(output_dir)
+            print("LSTM: extracting HTTP/HTTPS timing features from PCAP packet timestamps")
+            lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
             if lstm_csv_text:
                 print("LSTM: feature extraction complete, running beacon detection...")
                 lstm_results = predict_beacons(lstm_csv_text)
             else:
-                print("LSTM: skipped (no HTTP/HTTPS connections found in conn.log)")
+                print("LSTM: skipped (no HTTP/HTTPS packets found in PCAP)")
         except Exception as exc:
             print(f"LSTM: analysis failed - {exc}")
             import traceback
@@ -507,16 +507,16 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
             lstm_results = None
             if _LSTM_AVAILABLE:
                 try:
-                    from app.zeek_to_lstm_converter import export_lstm_features_from_zeek
+                    from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
 
-                    print("LSTM: extracting HTTP/HTTPS features from Zeek conn.log")
-                    lstm_csv_text = export_lstm_features_from_zeek(output_dir)
+                    print("LSTM: extracting HTTP/HTTPS timing features from PCAP packet timestamps")
+                    lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
                     if lstm_csv_text:
                         print("LSTM: feature extraction complete, running beacon detection...")
                         lstm_results = predict_beacons(lstm_csv_text)
                     else:
-                        print("LSTM: skipped (no HTTP/HTTPS connections found in conn.log)")
+                        print("LSTM: skipped (no HTTP/HTTPS packets found in PCAP)")
                 except Exception as exc:
                     print(f"LSTM: analysis failed - {exc}")
                     import traceback
