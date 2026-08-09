@@ -1,14 +1,19 @@
 ﻿import json
+import hashlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import threading
+import time
 import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -18,6 +23,21 @@ from pydantic import BaseModel
 _sys_path_root = Path(__file__).resolve().parent.parent  # backend/
 if str(_sys_path_root) not in sys.path:
     sys.path.insert(0, str(_sys_path_root))
+
+from app.model_config import (
+    DEFAULT_MODEL_KEY,
+    ModelConfig,
+    get_chat_completions_url,
+    get_model_config,
+    public_model_options,
+)
+from app.database import (
+    User,
+    check_database_connection,
+    create_analysis_record,
+    finish_analysis_record,
+)
+from app.auth import initialise_session_secret, get_optional_current_user, router as auth_router
 
 # LSTM beacon detection - gracefully degrades if dependencies are missing
 try:
@@ -43,16 +63,20 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 UPLOADS_DIR = APP_ROOT / "uploads"
 OUTPUTS_DIR = APP_ROOT / "outputs"
 
-SILICONFLOW_BASE_URL = os.getenv("SILICONFLOW_BASE_URL", "").rstrip("/")
-SILICONFLOW_API_KEY = os.getenv("SILICONFLOW_API_KEY", "")
-SILICONFLOW_MODEL = os.getenv("SILICONFLOW_MODEL", "")
-
 app = FastAPI()
+app.include_router(auth_router)
+
+
+@app.on_event("startup")
+async def initialise_auth_secret() -> None:
+    initialise_session_secret()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origin_regex=os.getenv(
+        "CORS_ORIGIN_REGEX", r"^https?://(localhost|127[.]0[.]0[.]1)(:[0-9]+)?$"
+    ),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -62,6 +86,46 @@ class AnalyzeResponse(BaseModel):
     name: str
     csv_path: str
     analysis_markdown: str
+
+
+@app.get("/database/status")
+async def database_status() -> dict[str, bool]:
+    """Provide a lightweight health check for the application database."""
+
+    return {"connected": check_database_connection()}
+
+
+@app.get("/models")
+async def list_report_models() -> dict:
+    """Expose only safe model-picker metadata to the browser."""
+    return {
+        "default_model": DEFAULT_MODEL_KEY,
+        "models": public_model_options(),
+    }
+
+
+class AnalysisCancelled(Exception):
+    """Raised when a client explicitly stops an in-progress analysis."""
+
+
+@dataclass
+class AnalysisJob:
+    cancel_event: threading.Event = field(default_factory=threading.Event)
+    processes: set[subprocess.Popen] = field(default_factory=set)
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+ACTIVE_ANALYSES: dict[str, AnalysisJob] = {}
+ACTIVE_ANALYSES_LOCK = threading.Lock()
+PENDING_CANCELLATIONS: dict[str, float] = {}
+PENDING_CANCELLATION_TTL_SECONDS = 300
+
+
+def _prune_pending_cancellations() -> None:
+    cutoff = time.monotonic() - PENDING_CANCELLATION_TTL_SECONDS
+    stale_ids = [analysis_id for analysis_id, created_at in PENDING_CANCELLATIONS.items() if created_at < cutoff]
+    for analysis_id in stale_ids:
+        PENDING_CANCELLATIONS.pop(analysis_id, None)
 
 
 def ensure_dirs() -> None:
@@ -98,63 +162,147 @@ def _collect_zeek_logs(log_dir: Path) -> str:
     return "\n\n".join(parts) if parts else "(No Zeek logs found)"
 
 
-def run_command(
-    cmd: list[str], cwd: Path | None = None, timeout: int | None = None
-) -> None:
-    """Run a subprocess, raising HTTPException on failure or timeout."""
+def _save_uploaded_pcap(upload: UploadFile, destination: Path, job: AnalysisJob | None = None) -> None:
+    """Copy an upload in chunks so cancellation also works during large uploads."""
 
-    try:
+    with destination.open("wb") as file_obj:
+        while chunk := upload.file.read(1024 * 1024):
+            _raise_if_cancelled(job)
+            file_obj.write(chunk)
+    _raise_if_cancelled(job)
+
+
+def _raise_if_cancelled(job: AnalysisJob | None) -> None:
+    if job and job.cancel_event.is_set():
+        raise AnalysisCancelled()
+
+
+def _terminate_process(process: subprocess.Popen) -> None:
+    """Stop a command and, on Windows, any child commands it spawned."""
+
+    if process.poll() is not None:
+        return
+
+    if os.name == "nt":
+        # Zeek/RITA may create child processes. /T avoids leaving them behind.
         subprocess.run(
-            cmd,
-            cwd=cwd,
-            check=True,
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
             capture_output=True,
             text=True,
-            timeout=timeout,
+            check=False,
         )
-    except subprocess.TimeoutExpired as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Command timed out after {timeout}s: {' '.join(cmd)}",
-        ) from exc
-    except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
-        stdout = (exc.stdout or "").strip()
-        detail = stderr or stdout or "Command failed"
-        raise HTTPException(status_code=500, detail=detail) from exc
+    else:
+        os.killpg(process.pid, signal.SIGTERM)
 
 
-def run_zeek(pcap_path: str, output_dir: Path) -> None:
+def _cancel_job(job: AnalysisJob) -> None:
+    job.cancel_event.set()
+    with job.lock:
+        processes = list(job.processes)
+    for process in processes:
+        _terminate_process(process)
+
+
+def run_command(
+    cmd: list[str],
+    cwd: Path | None = None,
+    timeout: int | None = None,
+    *,
+    job: AnalysisJob | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a cancellable subprocess, raising HTTPException on failure/timeout."""
+
+    _raise_if_cancelled(job)
+    popen_kwargs: dict = {
+        "cwd": cwd,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    try:
+        process = subprocess.Popen(cmd, **popen_kwargs)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to start command: {' '.join(cmd)}") from exc
+
+    if job:
+        with job.lock:
+            job.processes.add(process)
+
+    started_at = time.monotonic()
+    stdout = ""
+    stderr = ""
+    try:
+        while True:
+            try:
+                # communicate() drains stdout/stderr while waiting. Polling alone can
+                # deadlock when a child command writes enough output to fill a pipe.
+                stdout, stderr = process.communicate(timeout=0.15)
+                break
+            except subprocess.TimeoutExpired:
+                if job and job.cancel_event.is_set():
+                    _terminate_process(process)
+                    try:
+                        process.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
+                    raise AnalysisCancelled()
+                if timeout is not None and time.monotonic() - started_at >= timeout:
+                    _terminate_process(process)
+                    try:
+                        process.communicate(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.communicate()
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Command timed out after {timeout}s: {' '.join(cmd)}",
+                    )
+    finally:
+        if job:
+            with job.lock:
+                job.processes.discard(process)
+
+    if process.returncode != 0:
+        detail = (stderr or "").strip() or (stdout or "").strip() or "Command failed"
+        raise HTTPException(status_code=500, detail=detail)
+
+    return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
+
+
+def run_zeek(pcap_path: str, output_dir: Path, *, job: AnalysisJob | None = None) -> None:
     """Run Zeek on a PCAP file, trying standard CLI first, then readpcap."""
 
     try:
         run_command(
             ["zeek", "-r", pcap_path, "-C", "LogAscii::use_json=F"],
             cwd=output_dir,
+            job=job,
         )
         return
     except HTTPException:
         pass
 
-    run_command(["zeek", "readpcap", pcap_path, str(output_dir)])
+    run_command(["zeek", "readpcap", pcap_path, str(output_dir)], job=job)
 
 
 def _build_ai_request(
     csv_text: str,
     lstm_results: dict | None = None,
     *,
+    model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
     stream: bool = False,
 ) -> tuple[str, dict[str, str], dict]:
-    if not SILICONFLOW_BASE_URL or not SILICONFLOW_API_KEY or not SILICONFLOW_MODEL:
-        raise HTTPException(
-            status_code=500, detail="Missing SiliconFlow API configuration"
-        )
-
-    url = f"{SILICONFLOW_BASE_URL}/v1/chat/completions"
+    url = get_chat_completions_url(model_config)
     headers = {
-        "Authorization": f"Bearer {SILICONFLOW_API_KEY}",
+        "Authorization": f"Bearer {model_config.api_key}",
         "Content-Type": "application/json",
     }
 
@@ -163,7 +311,6 @@ def _build_ai_request(
         "你是一名资深网络威胁分析师。"
         "请始终使用中文回答，并输出专业的 Markdown 报告。"
     )
-
     prompt = (
         "请输出一份中文 Markdown 报告，且第一行标题必须严格为："
         "# C2Sherlock AI分析报告\n\n"
@@ -198,14 +345,15 @@ def _build_ai_request(
     prompt += f"\n原始分析输入如下：\n{csv_text}"
 
     payload = {
-        "model": SILICONFLOW_MODEL,
+        "model": model_config.model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.2,
-        "enable_thinking": False,
+        #"enable_thinking": False,
     }
+    payload.update(model_config.request_options)
     if stream:
         payload["stream"] = True
 
@@ -216,12 +364,14 @@ def generate_ai_analysis(
     csv_text: str,
     lstm_results: dict | None = None,
     *,
+    model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
 ) -> str:
     url, headers, payload = _build_ai_request(
         csv_text,
         lstm_results=lstm_results,
+        model_config=model_config,
         rita_ok=rita_ok,
         rag_context=rag_context,
         stream=False,
@@ -231,7 +381,7 @@ def generate_ai_analysis(
         response = requests.post(url, headers=headers, json=payload, timeout=120)
         response.raise_for_status()
     except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail="SiliconFlow API request failed") from exc
+        raise HTTPException(status_code=502, detail=f"{model_config.provider} API request failed") from exc
 
     data = response.json()
     try:
@@ -246,12 +396,64 @@ def stream_ai_analysis(
     csv_text: str,
     lstm_results: dict | None = None,
     *,
+    model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    job: AnalysisJob | None = None,
 ):
+    _raise_if_cancelled(job)
+    if model_config.provider == "OpenAI":
+        _, headers, chat_payload = _build_ai_request(
+            csv_text,
+            lstm_results=lstm_results,
+            model_config=model_config,
+            rita_ok=rita_ok,
+            rag_context=rag_context,
+            stream=False,
+        )
+        response_payload = {
+            "model": model_config.model,
+            "input": chat_payload["messages"],
+            "stream": True,
+            **model_config.request_options,
+        }
+        try:
+            response = requests.post(
+                f"{model_config.base_url.rstrip('/')}/responses",
+                headers=headers,
+                json=response_payload,
+                timeout=120,
+                stream=True,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise HTTPException(status_code=502, detail="OpenAI API request failed") from exc
+
+        try:
+            response.encoding = "utf-8"
+            for raw_line in response.iter_lines(decode_unicode=False):
+                _raise_if_cancelled(job)
+                if not raw_line:
+                    continue
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                try:
+                    event = json.loads(line[5:].strip())
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") == "response.output_text.delta" and event.get("delta"):
+                    yield event["delta"]
+                elif event.get("type") == "response.failed":
+                    raise HTTPException(status_code=502, detail="OpenAI report generation failed")
+        finally:
+            response.close()
+        return
+
     url, headers, payload = _build_ai_request(
         csv_text,
         lstm_results=lstm_results,
+        model_config=model_config,
         rita_ok=rita_ok,
         rag_context=rag_context,
         stream=True,
@@ -267,11 +469,12 @@ def stream_ai_analysis(
         )
         response.raise_for_status()
     except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail="SiliconFlow API request failed") from exc
+        raise HTTPException(status_code=502, detail=f"{model_config.provider} API request failed") from exc
 
     try:
         response.encoding = "utf-8"
         for raw_line in response.iter_lines(chunk_size=1, decode_unicode=False):
+            _raise_if_cancelled(job)
             if not raw_line:
                 continue
 
@@ -291,17 +494,77 @@ def stream_ai_analysis(
             except json.JSONDecodeError:
                 continue
 
-            choice = chunk.get("choices", [{}])[0]
-            delta_obj = choice.get("delta", {})
-            delta = delta_obj.get("content") or delta_obj.get("reasoning_content") or ""
+            choices = chunk.get("choices") or []
+
+            # 某些兼容 API 会发送 choices=[] 的状态或用量分块，
+            # 这种分块不包含正文，直接跳过即可。
+            if not choices:
+                continue
+
+            choice = choices[0] or {}
+            delta_obj = choice.get("delta") or {}
+
+            delta = (
+                delta_obj.get("content")
+                or ""
+            )
+
             if delta:
                 yield delta
+            # choice = chunk.get("choices", [{}])[0]
+            # delta_obj = choice.get("delta", {})
+            # delta = delta_obj.get("content") or delta_obj.get("reasoning_content") or ""
+            # if delta:
+            #     yield delta
     finally:
         response.close()
 
 
+def _file_sha256(file_path: Path) -> str:
+    digest = hashlib.sha256()
+    with file_path.open("rb") as file_obj:
+        for chunk in iter(lambda: file_obj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _cleanup_guest_artifacts(
+    upload_path: Path | None, output_dir: Path | None, csv_path: Path | None
+) -> None:
+    """Remove transient files after an anonymous analysis has been streamed."""
+
+    for file_path in (upload_path, csv_path):
+        if file_path:
+            try:
+                file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+    if output_dir:
+        try:
+            shutil.rmtree(output_dir, ignore_errors=True)
+        except OSError:
+            pass
+
+
 def sse_event(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
+
+
+@app.delete("/analyze/{analysis_id}")
+async def cancel_analysis(analysis_id: str) -> dict[str, str]:
+    """Request cancellation for one streaming analysis task."""
+
+    with ACTIVE_ANALYSES_LOCK:
+        _prune_pending_cancellations()
+        job = ACTIVE_ANALYSES.get(analysis_id)
+        if not job:
+            # The multipart upload may still be arriving, so the streaming route
+            # has not registered its job yet. Remember this cancellation request.
+            PENDING_CANCELLATIONS[analysis_id] = time.monotonic()
+
+    if job:
+        _cancel_job(job)
+    return {"status": "cancelling", "analysis_id": analysis_id}
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
@@ -430,6 +693,7 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     analysis_markdown = generate_ai_analysis(
         csv_text,
         lstm_results=lstm_results,
+        model_config=get_model_config(None),
         rita_ok=rita_ok,
         rag_context=rag_context,
     )
@@ -442,22 +706,57 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
 
 
 @app.post("/analyze/stream")
-async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse:
+async def analyze_pcap_stream(
+    pcap: UploadFile = File(...),
+    model_id: str | None = Form(None),
+    analysis_id: str | None = Form(None),
+    user: User | None = Depends(get_optional_current_user),
+) -> StreamingResponse:
+    model_config = get_model_config(model_id)
+    analysis_id = (analysis_id or uuid.uuid4().hex).strip()
+    if not analysis_id or len(analysis_id) > 128:
+        raise HTTPException(status_code=422, detail="Invalid analysis_id")
+
+    job = AnalysisJob()
+    with ACTIVE_ANALYSES_LOCK:
+        _prune_pending_cancellations()
+        if analysis_id in ACTIVE_ANALYSES:
+            raise HTTPException(status_code=409, detail="Analysis task is already running")
+        was_cancelled_before_start = analysis_id in PENDING_CANCELLATIONS
+        PENDING_CANCELLATIONS.pop(analysis_id, None)
+        ACTIVE_ANALYSES[analysis_id] = job
+    if was_cancelled_before_start:
+        job.cancel_event.set()
+
     def stream():
-        ensure_dirs()
-
-        name = uuid.uuid4().hex
-        rita_db_name = make_rita_db_name(name)
-        upload_path = UPLOADS_DIR / f"{name}.pcap"
-        output_dir = OUTPUTS_DIR / name
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        with upload_path.open("wb") as file_obj:
-            shutil.copyfileobj(pcap.file, file_obj)
-
+        record_id: int | None = None
+        upload_path: Path | None = None
+        output_dir: Path | None = None
+        csv_path: Path | None = None
         try:
+            _raise_if_cancelled(job)
+            ensure_dirs()
+
+            name = uuid.uuid4().hex
+            rita_db_name = make_rita_db_name(name)
+            upload_path = UPLOADS_DIR / f"{name}.pcap"
+            output_dir = OUTPUTS_DIR / name
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            _save_uploaded_pcap(pcap, upload_path, job)
+            if user:
+                record_id = create_analysis_record(
+                    user_id=user.id,
+                    original_filename=pcap.filename or "upload.pcap",
+                    storage_path=str(upload_path),
+                    sha256=_file_sha256(upload_path),
+                    file_size=upload_path.stat().st_size,
+                    model_id=model_config.key,
+                )
+
             yield sse_event("step", "zeek")
-            run_zeek(str(upload_path), output_dir)
+            run_zeek(str(upload_path), output_dir, job=job)
+            _raise_if_cancelled(job)
 
             zeek_logs = list(output_dir.glob("*.log"))
             if not zeek_logs:
@@ -474,6 +773,7 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                 run_command(
                     ["rita", "import", f"--database={rita_db_name}", f"--logs={output_dir}"],
                     timeout=600,
+                    job=job,
                 )
                 print("RITA: import OK")
             except HTTPException as exc:
@@ -481,21 +781,18 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
             else:
                 try:
                     print(f"RITA: exporting view for db={rita_db_name} ...")
-                    view_result = subprocess.run(
+                    view_result = run_command(
                         ["rita", "view", "--stdout", rita_db_name],
-                        check=True,
-                        capture_output=True,
-                        text=True,
                         timeout=120,
+                        job=job,
                     )
                     csv_text = view_result.stdout
                     rita_ok = True
                     print(f"RITA: view OK ({len(csv_text)} chars)")
-                except subprocess.TimeoutExpired:
-                    print("RITA: view timed out after 120s")
-                except subprocess.CalledProcessError as exc:
-                    detail = (exc.stderr or exc.stdout or "").strip()
-                    print(f"RITA: view failed - {detail}")
+                except AnalysisCancelled:
+                    raise
+                except HTTPException as exc:
+                    print(f"RITA: view failed - {exc.detail}")
 
             if not rita_ok:
                 csv_text = _collect_zeek_logs(output_dir)
@@ -505,6 +802,7 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
             csv_path.write_text(csv_text, encoding="utf-8")
 
             yield sse_event("step", "lstm")
+            _raise_if_cancelled(job)
             lstm_results = None
             if _LSTM_AVAILABLE:
                 try:
@@ -516,8 +814,11 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                     if lstm_csv_text:
                         print("LSTM: feature extraction complete, running beacon detection...")
                         lstm_results = predict_beacons(lstm_csv_text)
+                        _raise_if_cancelled(job)
                     else:
                         print("LSTM: skipped (no HTTP/HTTPS packets found in PCAP)")
+                except AnalysisCancelled:
+                    raise
                 except Exception as exc:
                     print(f"LSTM: analysis failed - {exc}")
                     import traceback
@@ -525,6 +826,7 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                     traceback.print_exc()
 
             yield sse_event("step", "rag")
+            _raise_if_cancelled(job)
             rag_context = None
             if not _RAG_AVAILABLE:
                 print(
@@ -566,6 +868,7 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                             rag_result = rag_engine.attribute_single_threat(
                                 merged_features[0]
                             )
+                            _raise_if_cancelled(job)
 
                             if rag_result["candidates"]:
                                 primary = rag_result["primary_candidate"]
@@ -581,6 +884,8 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                                 print("RAG: no matching APT group found in knowledge base")
                     else:
                         print("RAG: no threats detected by RITA or LSTM, skipping attribution")
+                except AnalysisCancelled:
+                    raise
                 except Exception as exc:
                     print(f"RAG: failed - {exc}")
                     import traceback
@@ -588,12 +893,15 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                     traceback.print_exc()
 
             yield sse_event("step", "ai")
+            _raise_if_cancelled(job)
             chunks: list[str] = []
             for delta in stream_ai_analysis(
                 csv_text,
                 lstm_results=lstm_results,
+                model_config=model_config,
                 rita_ok=rita_ok,
                 rag_context=rag_context,
+                job=job,
             ):
                 chunks.append(delta)
                 yield sse_event(
@@ -602,6 +910,17 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                 )
 
             analysis_markdown = "".join(chunks)
+            if record_id:
+                finish_analysis_record(
+                    record_id,
+                    status="completed",
+                    result_json={
+                        "rita_available": rita_ok,
+                        "lstm_completed": lstm_results is not None,
+                        "rag_completed": rag_context is not None,
+                    },
+                    report_markdown=analysis_markdown,
+                )
             payload = json.dumps(
                 {
                     "name": name,
@@ -611,8 +930,23 @@ async def analyze_pcap_stream(pcap: UploadFile = File(...)) -> StreamingResponse
                 ensure_ascii=False,
             )
             yield sse_event("result", payload)
+        except AnalysisCancelled:
+            if record_id:
+                finish_analysis_record(record_id, status="cancelled")
+            yield sse_event("cancelled", json.dumps({"analysis_id": analysis_id}))
         except HTTPException as exc:
+            if record_id:
+                finish_analysis_record(record_id, status="failed")
             yield sse_event("error", exc.detail)
+        except Exception:
+            if record_id:
+                finish_analysis_record(record_id, status="failed")
+            yield sse_event("error", "分析任务执行失败，请稍后重试")
+        finally:
+            if not user:
+                _cleanup_guest_artifacts(upload_path, output_dir, csv_path)
+            with ACTIVE_ANALYSES_LOCK:
+                ACTIVE_ANALYSES.pop(analysis_id, None)
 
     return StreamingResponse(
         stream(),

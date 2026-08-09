@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 backend/.env
+backend/.jwt_secret
 backend/uploads/
 backend/outputs/
 backend/chroma_db

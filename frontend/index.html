@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C2Sherlock 可视化分析平台</title>
-  <link rel="stylesheet" href="styles.css?v=20260705" />
+  <link rel="stylesheet" href="styles.css?v=20260808-auth-guest" />
 </head>
 <body>
   <header class="topbar">
@@ -20,8 +20,14 @@
       <button class="nav-btn" data-tab="principle"><span class="nav-icon">□</span>原理</button>
       <button class="nav-btn" data-tab="tool"><span class="nav-icon">▷</span>检测中心</button>
       <button class="nav-btn" data-tab="capability"><span class="nav-icon">▥</span>能力</button>
-      <button class="nav-btn" data-tab="team"><span class="nav-icon">◌</span>团队</button>
+      <button class="nav-btn" data-tab="profile"><span class="nav-icon">◌</span>个人中心</button>
     </nav>
+    <div class="account-actions" id="account-actions">
+      <span id="guest-mode-badge" class="guest-mode-badge"><span class="guest-mode-dot" aria-hidden="true"></span>游客模式</span>
+      <a id="login-entry-btn" class="login-entry" href="login.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/></svg><span>登录 / 注册</span></a>
+      <button id="avatar-btn" class="avatar-btn" type="button" hidden aria-label="打开个人中心"></button>
+      <button id="logout-btn" class="logout-btn" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg><span>退出登录</span></button>
+    </div>
   </header>
 
   <main class="shell">
@@ -223,70 +229,57 @@
     </section>
 
     <section id="tool" class="tab-page" data-page="tool">
-      <div class="section-heading page-heading console-heading">
-        <p class="eyebrow hero-badge">检测中心</p>
-        <h1>启动 PCAP 检测任务</h1>
-        <p>连接后端服务，上传 PCAP 文件，执行隐蔽 C2 通信检测、溯源分析及智能研判。</p>
-      </div>
-
       <div class="workspace">
         <section class="panel control-panel">
-          <div class="panel-title">
+          <div class="panel-title task-title">
             <span class="panel-icon">⚡</span>
             <div>
-              <h2>运行配置</h2>
-              <p>上传和 SSE 请求将使用这里配置的后端地址。</p>
+              <h2>创建检测任务</h2>
+              <p>选择样本并开始一次新的检测。</p>
             </div>
-          </div>
-
-          <div class="config-grid">
-            <label class="field">
-              <span>后端 API 地址</span>
-              <input id="api-base-input" type="text" spellcheck="false" placeholder="http://127.0.0.1:8765" />
-            </label>
-            <label class="field">
-              <span>模型 / API 名称</span>
+            <label class="field compact-model-field">
+              <span>报告模型</span>
               <select id="model-select">
-                <option value="SiliconFlow 默认模型">SiliconFlow 默认模型</option>
-                <option value="Qwen / DeepSeek 兼容模型">Qwen / DeepSeek 兼容模型</option>
-                <option value="自定义后端配置模型">自定义后端配置模型</option>
+                <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
+                <option value="qwen-3-6">Qwen 3.6</option>
+                <option value="glm-5-2">GLM 5.2</option>
+                <option value="gpt-5-5">GPT-5.5</option>
               </select>
             </label>
           </div>
-          <div class="quick-actions">
-            <button class="chip" data-api="http://127.0.0.1:8765">本机后端</button>
-            <button class="chip" data-api="http://218.244.140.250:8765">局域网示例</button>
-          </div>
-          <p class="request-line">当前请求：<code id="current-endpoint">http://127.0.0.1:8765/analyze/stream</code></p>
-
-          <div id="case-recommendation" class="case-recommendation" hidden></div>
 
           <div id="drop-zone" class="drop-zone">
             <div class="drop-content">
               <span class="upload-icon">⇧</span>
               <p class="drop-title">拖拽 PCAP 到这里</p>
-              <p class="drop-subtitle">或点击选择 .pcap / .pcapng / .cap 文件</p>
+              <p id="drop-hint" class="drop-subtitle">或点击选择 .pcap / .pcapng / .cap 文件</p>
+              <div id="selected-file" class="selected-file" hidden>
+                <span id="file-name">未选择文件</span>
+                <button id="clear-file-btn" type="button">移除文件 <span aria-hidden="true">×</span></button>
+              </div>
             </div>
             <input id="pcap-input" type="file" accept=".pcap,.pcapng,.cap" />
           </div>
 
           <div class="controls">
-            <span id="file-name" class="file-name">未选择文件</span>
+            <p id="status" class="status" role="status">当前未选择文件。</p>
             <div class="run-actions">
               <button id="analyze-btn" class="primary">开始分析</button>
               <button id="cancel-btn" class="secondary danger" type="button" disabled>取消分析</button>
             </div>
           </div>
 
-          <div class="status-card">
-            <h3>当前状态</h3>
-            <p id="status" class="status">等待选择 PCAP 文件。</p>
-          </div>
         </section>
 
         <aside class="analysis-column">
           <section class="panel progress-panel">
-            <h2>执行进度</h2>
+            <div class="progress-title">
+              <span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 18V6"/><path d="M4 18h16"/><path d="m7 14 4-4 3 3 5-6"/><path d="M16 7h3v3"/></svg></span>
+              <div>
+                <h2>检测流程</h2>
+                <p>检测开始后，系统将依次完成以下分析步骤。</p>
+              </div>
+            </div>
             <ol id="steps" class="steps">
               <li data-step="zeek"><span>日志解析</span></li>
               <li data-step="rita"><span>规则引擎</span></li>
@@ -296,23 +289,21 @@
             </ol>
           </section>
 
-          <section class="panel result-panel">
-            <div class="result-head">
-              <h2>分析结果</h2>
-              <div class="report-actions" aria-label="分析报告下载">
-                <select id="report-format" aria-label="选择报告格式">
-                  <option value="md">MD</option>
-                  <option value="doc">Word</option>
-                  <option value="pdf">PDF</option>
-                </select>
-                <button id="download-report-btn" class="report-download" type="button" disabled>下载</button>
-                <button id="print-report-btn" class="report-print" type="button" disabled>打印</button>
-              </div>
-            </div>
-            <div id="result" class="result">完成分析后，Markdown 报告会显示在这里。</div>
-          </section>
         </aside>
       </div>
+
+      <section class="panel sample-panel">
+        <div class="sample-panel-title"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4.5h11a3 3 0 0 1 3 3v12H8a3 3 0 0 0-3 3z"/><path d="M5 4.5v15a3 3 0 0 1 3-3h11"/><path d="M9 8h6M9 12h6"/></svg></span><div><h2>参考样本</h2><p>选择典型样本，下载后可拖拽到上方上传区进行检测。</p></div></div>
+        <div class="sample-grid">
+          <article class="sample-card benign"><span class="sample-type">正常样例</span><h3>商业域名访问 / 低风险周期请求</h3><p>正常商业域名访问，存在轻微周期性外联特征，整体风险较低。</p><div class="sample-meta"><span>▧ benign5_smashburger.pcapng · 63 KB</span><button class="secondary" type="button" data-case-download="benign5_smashburger">下载样本</button></div></article>
+          <article class="sample-card malicious"><span class="sample-type">恶意样例</span><h3>周期性 Beacon 与异常控制目标</h3><p>高置信度 HTTP Beacon 通信，伴随异常控制特征，建议进一步研判。</p><div class="sample-meta"><span>▧ cs4_amazon_http.pcapng · 421 KB</span><button class="secondary" type="button" data-case-download="cs4_amazon_http">下载样本</button></div></article>
+        </div>
+      </section>
+
+      <section id="report-panel" class="panel result-panel" hidden aria-live="polite">
+        <div class="result-head"><div><p class="eyebrow">Analysis Report</p><h2>分析报告</h2></div><div class="report-actions" aria-label="分析报告下载"><select id="report-format" aria-label="选择报告格式"><option value="md">.md</option><option value="docx">.docx</option><option value="pdf">.pdf</option></select><button id="download-report-btn" class="report-download" type="button" disabled>下载</button><button id="print-report-btn" class="report-print" type="button" disabled>打印</button></div></div>
+        <div id="result" class="result">分析任务运行中，报告将实时显示在这里。</div>
+      </section>
     </section>
 
     <section id="principle" class="tab-page" data-page="principle">
@@ -623,7 +614,7 @@
       <div class="section-heading page-heading">
         <p class="eyebrow">Capability</p>
         <h1>能力展示</h1>
-        <p>系统优势、历史样例表格和案例解释。</p>
+        <p>系统优势与历史样例表格。</p>
       </div>
 
       <section class="panel capability-module">
@@ -679,101 +670,46 @@
         </div>
       </section>
 
-      <section class="panel capability-module">
-        <div class="panel-title compact">
-          <h2>案例解释</h2>
-          <p>本区域提供典型正常与恶意案例说明，支持下载样本文件并进入检测中心进行分析验证。</p>
-        </div>
-        <div class="case-compare">
-          <article class="explain-card benign" data-case="benign5_smashburger">
-            <span>正常样例</span>
-            <h3>商业域名访问 / 低风险周期请求</h3>
-            <p>该流量主要表现为主机访问正常商业域名，虽然存在一定周期性外联特征，但目标信誉较高，且未出现 DNS 隧道、长连接异常或威胁情报命中。综合来看，更接近浏览器后台访问、应用更新检测或其他低风险自动化请求，整体风险较低。</p>
-          </article>
-          <article class="explain-card malicious" data-case="cs4_amazon_http">
-            <span>恶意样例</span>
-            <h3>周期性 Beacon 与异常控制目标</h3>
-            <p>该样例中主机与内网目标之间建立了高置信度 HTTP Beacon 通信，连接模式呈现明显的自动化控制特征，并伴随异常 User-Agent 与可疑横向控制迹象。系统将其判定为高风险 C2 外联，建议立即隔离主机、阻断连接并保留取证证据。</p>
-          </article>
-        </div>
-      </section>
     </section>
 
-    <section id="team" class="tab-page" data-page="team">
-      <div class="team-hero">
-        <div>
-          <div class="team-kickers">
-            <p class="eyebrow hero-badge">Team</p>
-            <p class="eyebrow hero-badge school-badge">华中科技大学网络空间安全学院</p>
-          </div>
-          <h1>四头八臂队</h1>
-          <p class="subtitle">
-            四头八臂队来自华中科技大学网络空间安全学院，由张乾坤老师指导。我们由四位女生组成，专注于网络对抗与 AI 安全交叉方向。
-            针对传统检测手段难以捕获隐蔽 C2 信道的痛点，团队提出 C2Sherlock 系统：借助大模型的语义理解与行为推理能力，
-            从海量流量中发现暗藏的"隐形指挥链"。我们兼具逻辑缜密性与技术韧性，致力于打造有温度、有精度、有深度的下一代安全检测体系。
-          </p>
-        </div>
-        <div class="team-stats" aria-label="团队关键词">
-          <span>Network Defense</span>
-          <span>AI Security</span>
-          <span>C2 Detection</span>
-          <span>Forensics</span>
+    <section id="profile" class="tab-page profile-page" data-page="profile">
+      <div class="profile-hero">
+        <div class="profile-avatar" id="profile-avatar">U</div>
+        <div class="profile-details">
+          <p class="eyebrow">Account Center</p>
+          <h1 id="profile-username">个人中心</h1>
+          <p id="profile-email" class="subtitle">登录后可管理账号与查看已保存的分析记录。</p>
+          <p id="profile-created-at" class="profile-meta"></p>
+          <button id="change-password-open-btn" class="profile-password-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>修改密码</button>
         </div>
       </div>
 
-      <article class="mentor-card">
-        <span class="mentor-avatar">张</span>
-        <div class="mentor-content">
-          <p class="mentor-role">指导老师</p>
-          <h2>张乾坤</h2>
-          <p>
-            华中科技大学网络空间安全学院副研究员、博士生导师、院长助理。主要研究方向包括理论计算机科学与可信人工智能，
-            聚焦算法设计、模型安全、公平性与鲁棒性。入选国家网信高层次人才、湖北省海外高层次人才等。在 STOC、CCS、ICML
-            等国际顶级会议与期刊发表论文十余篇，获 IEEE TrustCom 2025 最佳论文奖等荣誉。指导学生获“挑战杯”中国青年科技创新
-            “揭榜挂帅”人工智能领域主擂台赛全国特等奖、全国大学生物联网设计竞赛全国一等奖等。
-          </p>
-        </div>
-      </article>
-
-      <div class="team-grid">
-        <article class="member-card lead-member">
-          <span class="member-avatar">王</span>
-          <div>
-            <p class="member-role">队长 · 2023级本科生</p>
-            <h2>王羽飞</h2>
-            <p>系统总体设计 · LSTM 时序检测模型 · 技术文档</p>
-          </div>
-        </article>
-        <article class="member-card">
-          <span class="member-avatar">袁</span>
-          <div>
-            <p class="member-role">队员 · 2023级本科生</p>
-            <h2>袁佳纯</h2>
-            <p>系统方案设计 · 实现原理 · 技术文档</p>
-          </div>
-        </article>
-        <article class="member-card">
-          <span class="member-avatar">石</span>
-          <div>
-            <p class="member-role">队员 · 2023级本科生</p>
-            <h2>石钰婷</h2>
-            <p>前端开发 · 交互设计 · 数据可视化</p>
-          </div>
-        </article>
-        <article class="member-card">
-          <span class="member-avatar">周</span>
-          <div>
-            <p class="member-role">队员 · 2023级本科生</p>
-            <h2>周诗嘉</h2>
-            <p>规则检测引擎 · 攻击溯源 · 后端部署</p>
-          </div>
-        </article>
+      <div class="profile-grid">
+        <section class="panel profile-card profile-history-card">
+          <div class="panel-title compact"><p class="eyebrow">History</p><h2>分析历史</h2><p>已登录后发起的分析将自动保存到此账号。历史列表将在下一步接入展示。</p></div>
+          <div class="history-empty">游客分析不会保存；登录后开始一次新分析即可建立个人历史记录。</div>
+        </section>
       </div>
+
     </section>
   </main>
 
+  <div id="change-password-modal" class="password-modal" hidden aria-hidden="true">
+    <section class="password-dialog" role="dialog" aria-modal="true" aria-labelledby="change-password-title">
+      <button id="change-password-close-btn" class="password-modal-close" type="button" aria-label="关闭">×</button>
+      <div class="panel-title compact"><p class="eyebrow">Security</p><h2 id="change-password-title">修改密码</h2><p>修改成功后将退出登录，请使用新密码重新登录。</p></div>
+      <form id="change-password-form" class="account-form">
+        <label><span>当前密码</span><input name="current_password" type="password" required autocomplete="current-password" /></label>
+        <label><span>新密码</span><input name="new_password" type="password" required minlength="8" autocomplete="new-password" /></label>
+        <label><span>确认新密码</span><input name="confirm_new_password" type="password" required minlength="8" autocomplete="new-password" /></label>
+        <p id="change-password-message" class="form-message" role="status"></p>
+        <button class="primary" type="submit">更新密码</button>
+      </form>
+    </section>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"></script>
   <div id="case-toast" class="case-toast" hidden></div>
-  <script src="app.js?v=20260703"></script>
+  <script src="app.js?v=20260808-auth"></script>
 </body>
 </html>

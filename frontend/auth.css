@@ -1,0 +1,281 @@
+:root {
+  --ink: #0f172a;
+  --muted: #6b7c93;
+  --line: #d8e5e8;
+  --field: #f8fbfb;
+  --green: #169b84;
+  --green-dark: #11836f;
+  --shadow: 0 16px 40px rgba(22, 61, 67, .08);
+  --auth-panel-width: 500px;
+  --auth-rhythm: 30px;
+  --demo-account-height: 162px;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+
+body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f4faf9;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 70px;
+  padding: 14px clamp(20px, 4vw, 56px);
+  border-bottom: 1px solid rgba(219, 230, 226, 0.9);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.045);
+  backdrop-filter: blur(16px);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 240px; color: inherit; }
+.brand-mark { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; color: #fff; font-weight: 800; background: linear-gradient(135deg, var(--green), #5eead4); box-shadow: 0 10px 24px rgba(16, 185, 129, 0.24); }
+.brand strong { display: block; font-size: 16px; line-height: 1.1; }
+.brand small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.header-actions a { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1px solid #e2ebed; border-radius: 10px; color: #5c6d80; background: rgba(255, 255, 255, .72); text-decoration: none; font-size: 14px; font-weight: 700; transition: border-color .18s ease, color .18s ease, transform .18s ease; }
+.header-actions svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.9; }
+.header-actions a:hover { border-color: rgba(22, 160, 133, .48); color: var(--green-dark); transform: translateY(-1px); }
+
+.auth-layout { display: grid; min-height: 0; place-items: center; overflow: visible; padding: 30px 20px; }
+.auth-shell { display: grid; width: min(570px, 100%); height: min(530px, calc(100vh - 170px)); min-height: 0; overflow: hidden; border: 1px solid #dfeaec; border-radius: 23px; background: rgba(255, 255, 255, .97); box-shadow: var(--shadow); }
+.auth-card { display: grid; height: 100%; place-items: center; padding: 26px 44px; }
+.auth-card-content { width: 100%; }
+.form-heading { margin-bottom: 20px; text-align: center; }
+.form-heading p { margin: 0 0 6px; color: var(--green-dark); font-size: 12px; font-weight: 700; letter-spacing: .13em; }
+.form-heading h2 { margin: 0; color: var(--ink); font-size: 29px; letter-spacing: -.045em; }
+.form-heading span { display: block; margin-top: 6px; color: var(--muted); font-size: 14px; }
+
+.account-form { display: grid; gap: 10px; }
+.account-form label { display: grid; gap: 6px; color: #31445a; font-size: 13px; font-weight: 750; }
+.input-control { position: relative; display: block; }
+.account-form input { width: 100%; height: 42px; padding: 0 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--field); font: inherit; font-size: 14px; outline: none; transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+.input-control input { padding-left: 44px; }
+.password-control input { padding-right: 46px; }
+.field-icon { position: absolute; z-index: 1; top: 50%; left: 15px; width: 17px; height: 17px; color: #91a2b4; fill: none; pointer-events: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; transform: translateY(-50%); transition: color .18s ease; }
+.input-control:focus-within .field-icon { color: var(--green); }
+.password-toggle { position: absolute; z-index: 1; top: 50%; right: 7px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 8px; color: #8294a8; background: transparent; cursor: pointer; transform: translateY(-50%); }
+.password-toggle:hover { color: var(--green-dark); background: rgba(22, 160, 133, .06); }
+.password-toggle:focus-visible { outline: 2px solid rgba(22, 160, 133, .45); outline-offset: 1px; }
+.password-toggle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.password-toggle .eye-closed { display: none; }
+.password-toggle[aria-pressed="true"] .eye-open { display: none; }
+.password-toggle[aria-pressed="true"] .eye-closed { display: block; }
+.account-form input::placeholder { color: #9aaaba; opacity: 1; }
+.account-form input:hover { border-color: #bed3d6; background: #fff; }
+.account-form input:focus { border-color: var(--green); background: #fff; box-shadow: 0 0 0 3px rgba(22, 160, 133, .08); }
+.primary { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; margin-top: 4px; border: 0; border-radius: 12px; padding: 12px 14px; color: #fff; background: var(--green); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 14px rgba(22, 155, 132, .14); transition: background .18s ease, box-shadow .18s ease, transform .18s ease; }
+.primary:hover { background: var(--green-dark); box-shadow: 0 8px 16px rgba(22, 155, 132, .18); transform: translateY(-1px); }
+.primary .action-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.9; }
+.primary:disabled { cursor: wait; opacity: .65; transform: none; }
+.switch-link { margin: 16px 0 0; color: var(--muted); text-align: center; font-size: 13px; }
+.switch-link a { margin-left: 5px; color: var(--green-dark); text-decoration: none; font-weight: 800; }
+.switch-link a:hover { text-decoration: underline; }
+
+/* Registration needs room for four complete fields.  Keep one vertical rhythm
+   between each major block instead of compressing the form into login sizing. */
+.register-page {
+  --register-rhythm: var(--auth-rhythm);
+  height: auto;
+  min-height: 100vh;
+}
+
+.register-page .auth-layout {
+  overflow: visible;
+}
+
+.register-page .auth-shell {
+  width: min(var(--auth-panel-width), 100%);
+  height: auto;
+}
+
+.register-page .auth-card {
+  height: auto;
+  place-items: stretch;
+  padding: var(--register-rhythm) 56px;
+}
+
+.register-page .auth-card-content {
+  display: grid;
+  gap: var(--register-rhythm);
+}
+
+.register-page .form-heading,
+.register-page .switch-link {
+  margin: 0;
+}
+
+.register-page .account-form {
+  gap: var(--register-rhythm);
+}
+
+.register-page .account-form label {
+  gap: 8px;
+}
+
+.register-page .primary {
+  margin-top: 0;
+}
+
+/* Keep the login panel the same footprint as registration.  The login form
+   has fewer fields, so its major blocks share the available vertical space
+   evenly instead of leaving a large unused area at the bottom. */
+.login-page {
+  --login-rhythm: var(--auth-rhythm);
+  height: auto;
+  min-height: 100vh;
+}
+
+.login-page .auth-layout {
+  overflow: visible;
+}
+
+.login-page .auth-shell {
+  width: min(var(--auth-panel-width), 100%);
+  height: auto;
+}
+
+.login-page .auth-card {
+  height: auto;
+  place-items: stretch;
+  padding: var(--login-rhythm) 56px;
+}
+
+.login-page .auth-card-content {
+  display: grid;
+  gap: var(--login-rhythm);
+}
+
+.login-page .account-form {
+  display: grid;
+  gap: var(--login-rhythm);
+}
+
+.login-page .account-form label {
+  gap: 8px;
+}
+
+.login-page .primary {
+  margin-top: 0;
+}
+
+.login-page .form-heading,
+.login-page .switch-link,
+.login-page .demo-account-card {
+  margin: 0;
+}
+
+.login-page .demo-account-card {
+  align-items: stretch;
+  flex-direction: column;
+  height: var(--demo-account-height);
+  min-height: 0;
+  gap: 16px;
+  overflow: hidden;
+  padding: 18px 20px;
+  justify-content: center;
+  text-align: center;
+}
+
+.login-page .demo-account-info p {
+  margin-bottom: 9px;
+  font-size: 16px;
+}
+
+.login-page .demo-account-info > div,
+.login-page .demo-account-info b,
+.login-page .demo-fill-btn {
+  font-size: 14px;
+}
+
+.login-page .demo-account-info > div {
+  align-items: center;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-page .demo-account-info p {
+  justify-content: center;
+}
+
+.login-page .demo-fill-btn {
+  align-self: center;
+  padding: 10px 12px;
+}
+
+.demo-account-card { display: flex; align-items: center; justify-content: space-between; min-height: 76px; gap: 16px; margin-top: 16px; padding: 14px 15px 14px 17px; border: 1px solid #cfe5e0; border-radius: 12px; background: #f1faf7; }
+.demo-account-info { min-width: 0; }
+.demo-account-info p { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; color: #285d53; font-size: 13px; font-weight: 800; }
+.demo-account-info p span { padding: 2px 5px; border-radius: 4px; color: var(--green-dark); background: rgba(22, 160, 133, .1); font-size: 9px; letter-spacing: .08em; }
+.demo-account-info > div { display: flex; flex-wrap: wrap; gap: 5px 16px; color: var(--muted); font-size: 11px; }
+.demo-account-info b { margin-left: 4px; color: #29485a; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
+.demo-fill-btn { flex: 0 0 auto; border: 1px solid rgba(22, 160, 133, .34); border-radius: 9px; padding: 8px 10px; color: var(--green-dark); background: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; transition: background .18s ease, border-color .18s ease, color .18s ease; }
+.demo-fill-btn:hover { border-color: var(--green); color: #fff; background: var(--green); }
+.auth-toast { position: fixed; z-index: 20; top: 88px; left: 50%; display: flex; align-items: center; gap: 14px; width: min(420px, calc(100vw - 32px)); padding: 10px 12px 10px 14px; border: 1px solid #cfe5e0; border-radius: 10px; color: #176a5b; background: rgba(246, 255, 251, .98); box-shadow: 0 10px 28px rgba(22, 61, 67, .13); font-size: 13px; line-height: 1.45; transform: translateX(-50%); }
+.auth-toast > span { flex: 1 1 auto; }
+.auth-toast button { flex: 0 0 auto; border: 1px solid rgba(22, 155, 132, .35); border-radius: 7px; padding: 5px 10px; color: var(--green-dark); background: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.auth-toast button:hover { border-color: var(--green); color: #fff; background: var(--green); }
+.auth-toast button:focus-visible { outline: 2px solid rgba(22, 155, 132, .42); outline-offset: 2px; }
+.auth-toast.error { border-color: #f1c7cc; color: #bb3543; background: #fff8f8; }
+.auth-toast[hidden] { display: none; }
+
+.auth-footer { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 0 20px 17px; color: #8191a4; font-size: 12px; line-height: 1.4; text-align: center; }
+.auth-footer svg { width: 15px; height: 15px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; }
+
+
+@media (max-height: 800px) and (min-width: 561px) {
+  .auth-shell { height: min(530px, calc(100vh - 130px)); }
+  .auth-card { padding: 20px 40px; }
+  .form-heading { margin-bottom: 17px; }
+  .form-heading p { margin-bottom: 6px; font-size: 11px; }
+  .form-heading h2 { font-size: 26px; }
+  .form-heading span { margin-top: 6px; font-size: 13px; }
+  .account-form { gap: 10px; }
+  .account-form label { gap: 4px; }
+  .account-form input { height: 40px; }
+  .primary { min-height: 42px; margin-top: 2px; padding-top: 9px; padding-bottom: 9px; }
+  .switch-link { margin-top: 13px; }
+  .demo-account-card { min-height: 64px; margin-top: 10px; padding: 9px 12px 9px 14px; }
+  .demo-account-info p { margin-bottom: 5px; font-size: 12px; }
+  .auth-footer { padding-bottom: 10px; }
+  .register-page .auth-shell { height: auto; }
+  .register-page .auth-card { padding: var(--register-rhythm) 48px; }
+  .login-page .auth-card { padding-right: 48px; padding-left: 48px; }
+}
+
+@media (max-width: 560px) {
+  body { height: auto; overflow: auto; }
+  .site-header { min-height: 62px; padding: 10px 18px; }
+  .brand { min-width: 0; gap: 9px; }
+  .brand-mark { width: 36px; height: 36px; border-radius: 11px; }
+  .brand small { display: none; }
+  .header-actions a { padding: 7px 10px; font-size: 12px; }
+  .auth-layout { min-height: 0; padding: 30px 16px; overflow: visible; }
+  .auth-shell { height: auto; }
+  .auth-card { height: auto; padding: 30px 26px 26px; }
+  .register-page { --register-rhythm: 18px; }
+  .register-page .auth-shell { height: auto; }
+  .register-page .auth-card { padding: 28px 26px; }
+  .login-page .auth-shell { height: auto; }
+  .login-page .auth-card { padding: 28px 26px; }
+  .login-page .auth-card-content { gap: 18px; align-content: start; }
+  .login-page .account-form { display: grid; gap: 18px; }
+  .form-heading { margin-bottom: 20px; }
+  .form-heading h2 { font-size: 26px; }
+  .demo-account-card { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .demo-fill-btn { width: 100%; }
+  .auth-toast { top: 74px; }
+  .auth-footer { padding: 0 16px 14px; font-size: 11px; }
+}

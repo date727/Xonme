@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>注册 - C2Sherlock</title>
+  <link rel="stylesheet" href="auth.css" />
+</head>
+<body class="register-page">
+  <header class="site-header">
+    <div class="brand" aria-label="C2Sherlock">
+      <span class="brand-mark">C2</span>
+      <span>
+        <strong>C2Sherlock</strong>
+        <small>隐蔽 C2 通信检测与溯源系统</small>
+      </span>
+    </div>
+    <div class="header-actions"><a class="outline" href="index.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/></svg><span>游客模式</span></a></div>
+  </header>
+  <main class="auth-layout">
+    <div class="auth-shell">
+      <section class="auth-card">
+        <div class="auth-card-content">
+          <div class="form-heading">
+            <p>C2Sherlock · Threat Intelligence</p>
+            <h2>创建你的账户</h2>
+            <span>开启完整的检测与溯源体验</span>
+          </div>
+          <form id="auth-form" class="account-form" data-endpoint="/auth/register">
+            <label><span>用户名</span><span class="input-control"><svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.25"/><path d="M5.5 20c.7-3.45 3-5.2 6.5-5.2s5.8 1.75 6.5 5.2"/></svg><input id="register-username" name="username" required minlength="3" maxlength="50" pattern="[A-Za-z0-9_]+" autocomplete="username" autofocus placeholder="请输入 3–50 位用户名" /></span></label>
+            <label><span>邮箱</span><span class="input-control"><svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4.5 7 7.5 5.8L19.5 7"/></svg><input id="register-email" name="email" type="email" required autocomplete="email" placeholder="请输入邮箱地址" /></span></label>
+            <label><span>密码</span><span class="input-control password-control"><svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10M12 14v2"/></svg><input id="register-password" name="password" type="password" required minlength="8" autocomplete="new-password" placeholder="请输入至少 8 位密码" /><button class="password-toggle" type="button" data-password-toggle aria-controls="register-password" aria-label="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="eye-open" d="M2.5 12s3.3-5.5 9.5-5.5S21.5 12 21.5 12 18.2 17.5 12 17.5 2.5 12 2.5 12Z"/><circle class="eye-open" cx="12" cy="12" r="2.5"/><path class="eye-closed" d="m3.5 3.5 17 17M9.9 6.8A9.8 9.8 0 0 1 12 6.5c6.2 0 9.5 5.5 9.5 5.5a17 17 0 0 1-3.1 3.6M6.2 8.1A16.5 16.5 0 0 0 2.5 12s3.3 5.5 9.5 5.5c.8 0 1.6-.1 2.3-.3"/><path class="eye-closed" d="M9.7 9.7a3.2 3.2 0 0 0 4.5 4.5"/></svg></button></span></label>
+            <label><span>确认密码</span><span class="input-control password-control"><svg class="field-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10M12 14v2"/></svg><input id="register-confirm-password" name="confirm_password" type="password" required minlength="8" autocomplete="new-password" placeholder="请再次输入密码" /><button class="password-toggle" type="button" data-password-toggle aria-controls="register-confirm-password" aria-label="显示密码" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="eye-open" d="M2.5 12s3.3-5.5 9.5-5.5S21.5 12 21.5 12 18.2 17.5 12 17.5 2.5 12 2.5 12Z"/><circle class="eye-open" cx="12" cy="12" r="2.5"/><path class="eye-closed" d="m3.5 3.5 17 17M9.9 6.8A9.8 9.8 0 0 1 12 6.5c6.2 0 9.5 5.5 9.5 5.5a17 17 0 0 1-3.1 3.6M6.2 8.1A16.5 16.5 0 0 0 2.5 12s3.3 5.5 9.5 5.5c.8 0 1.6-.1 2.3-.3"/><path class="eye-closed" d="M9.7 9.7a3.2 3.2 0 0 0 4.5 4.5"/></svg></button></span></label>
+            <button class="primary" type="submit"><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M13 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5"/></svg>创建账户并进入系统</button>
+          </form>
+          <p class="switch-link">已有账号？<a href="login.html">去登录</a></p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer class="auth-footer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 19 6v5.3c0 4.4-2.8 7.5-7 9.2-4.2-1.7-7-4.8-7-9.2V6z"/><path d="m8.7 12 2.1 2.1 4.5-4.5"/></svg><span>专注隐蔽 C2 检测与溯源分析 · 保障网络空间安全</span></footer>
+  <div id="auth-toast" class="auth-toast" role="status" aria-live="polite" hidden><span id="auth-toast-message"></span><button id="auth-toast-close" type="button">确定</button></div>
+  <script src="auth.js?v=20260808-auth-confirm-toast"></script>
+</body>
+</html>

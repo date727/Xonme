@@ -1,12 +1,13 @@
 const STORAGE_KEYS = {
-  apiBase: "c2s.apiBase",
   modelName: "c2s.modelName",
 };
 
-const defaultApiBase =
-  window.location.protocol === "file:"
-    ? "http://127.0.0.1:8765"
-    : `${window.location.protocol}//${window.location.hostname}:8765`;
+let currentUser = null;
+let sessionResolved = false;
+
+// The frontend can run on any host (for example :5500); the backend is always
+// reached through that same host on its fixed service port.
+const apiBase = `${window.location.protocol}//${window.location.hostname}:8765`;
 
 const normalizeMarkdown = (value) => {
   let text = typeof value === "string" ? value : String(value ?? "");
@@ -38,14 +39,16 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 const dropZone = $("#drop-zone");
 const pcapInput = $("#pcap-input");
 const fileName = $("#file-name");
+const selectedFileEl = $("#selected-file");
+const clearFileBtn = $("#clear-file-btn");
+const dropHint = $("#drop-hint");
 const analyzeBtn = $("#analyze-btn");
 const cancelBtn = $("#cancel-btn");
 const statusEl = $("#status");
 const resultEl = $("#result");
+const reportPanel = $("#report-panel");
 const stepsEl = $("#steps");
-const apiBaseInput = $("#api-base-input");
 const modelSelect = $("#model-select");
-const currentEndpoint = $("#current-endpoint");
 const caseTableBody = $("#case-table-body");
 const reportFormat = $("#report-format");
 const downloadReportBtn = $("#download-report-btn");
@@ -58,6 +61,11 @@ let analysisRunning = false;
 let currentStep = null;
 let latestReportMarkdown = "";
 let activeController = null;
+let activeAnalysisId = null;
+
+const createAnalysisId = () =>
+  window.crypto?.randomUUID?.() ||
+  `analysis-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const caseExamples = {
   benign5_smashburger: {
@@ -81,15 +89,6 @@ const stepLabels = {
   ai: "正在生成大模型研判报告...",
 };
 
-const normalizeApiBase = (value) => value.trim().replace(/\/+$/, "");
-
-const getApiBase = () => normalizeApiBase(apiBaseInput.value || defaultApiBase);
-
-const updateEndpointDisplay = () => {
-  const base = getApiBase();
-  currentEndpoint.textContent = `${base || "请填写后端地址"}/analyze/stream`;
-};
-
 const setStatus = (message, isError = false) => {
   statusEl.textContent = message;
   statusEl.classList.toggle("error", isError);
@@ -100,9 +99,28 @@ const setReportDownloadEnabled = (enabled) => {
   if (printReportBtn) printReportBtn.disabled = !enabled;
 };
 
+const setReportVisible = (visible) => {
+  if (reportPanel) reportPanel.hidden = !visible;
+};
+
+const setUploadLocked = (locked) => {
+  dropZone.classList.toggle("locked", locked);
+  pcapInput.disabled = locked;
+  if (clearFileBtn) clearFileBtn.disabled = locked;
+  if (dropHint) {
+    dropHint.textContent = locked
+      ? "任务执行中，暂不可更换文件"
+      : selectedFile
+        ? "拖拽新文件可替换当前文件"
+        : "或点击选择 .pcap / .pcapng / .cap 文件";
+  }
+};
+
 const setRunControls = (running) => {
   analyzeBtn.disabled = running;
+  analyzeBtn.textContent = running ? "分析中…" : "开始分析";
   if (cancelBtn) cancelBtn.disabled = !running;
+  setUploadLocked(running);
 };
 
 const resetSteps = () => {
@@ -152,7 +170,19 @@ const clearActiveStep = () => {
 const setFile = (file) => {
   selectedFile = file;
   fileName.textContent = file ? `${file.name} · ${Math.ceil(file.size / 1024)} KB` : "未选择文件";
-  if (file) setStatus("文件已选择，可以开始分析。");
+  if (selectedFileEl) selectedFileEl.hidden = !file;
+  setUploadLocked(false);
+  setStatus(file ? "文件已选择，可以开始分析。" : "当前未选择文件。");
+};
+
+const clearSelectedFile = () => {
+  if (analysisRunning) return;
+  selectedFile = null;
+  pcapInput.value = "";
+  fileName.textContent = "未选择文件";
+  if (selectedFileEl) selectedFileEl.hidden = true;
+  setUploadLocked(false);
+  setStatus("当前未选择文件。");
 };
 
 const getReportBaseName = () => {
@@ -467,17 +497,24 @@ const printReport = () => {
   });
 };
 
-const exportReportAsPdf = () => {
-  const printWindow = openReportWindow(latestReportMarkdown, (openedWindow) => {
-    openedWindow.focus();
-    openedWindow.print();
+const downloadGeneratedReport = async (format, baseName) => {
+  const response = await fetch(`${apiBase}/reports/${format}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ markdown: latestReportMarkdown, filename: baseName }),
   });
-  if (printWindow) {
-    setStatus('已打开报告打印窗口，请在打印对话框中选择“另存为 PDF”。');
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `报告导出失败（${response.status}）`);
   }
+
+  const blob = await response.blob();
+  downloadBlob(blob, `${baseName}.${format}`);
 };
 
-const downloadReport = () => {
+const downloadReport = async () => {
   if (!latestReportMarkdown.trim()) {
     setStatus("当前还没有可下载的分析报告。", true);
     return;
@@ -491,19 +528,37 @@ const downloadReport = () => {
     return;
   }
 
-  if (format === "doc") {
-    downloadBlob(new Blob([createReportHtml(latestReportMarkdown)], { type: "application/msword;charset=utf-8" }), `${baseName}.doc`);
-    return;
+  downloadReportBtn.disabled = true;
+  try {
+    await downloadGeneratedReport(format, baseName);
+    setStatus(`报告已下载为 ${format.toUpperCase()} 文件。`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "报告导出失败";
+    setStatus(message, true);
+  } finally {
+    downloadReportBtn.disabled = false;
   }
-
-  exportReportAsPdf();
 };
 
-const cancelAnalysis = () => {
-  if (!analysisRunning || !activeController) return;
-  setStatus("正在取消当前分析...");
+const cancelAnalysis = async () => {
+  if (!analysisRunning || !activeController || !activeAnalysisId) return;
+  setStatus("正在请求后端取消分析...");
   cancelBtn.disabled = true;
-  activeController.abort();
+  try {
+    const response = await fetch(`${apiBase}/analyze/${activeAnalysisId}`, {
+      method: "DELETE",
+      credentials: "include",
+      keepalive: true,
+    });
+    if (!response.ok) {
+      throw new Error(`后端未能取消任务（${response.status}）`);
+    }
+    activeController.abort();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "取消请求失败";
+    setStatus(`${message}；分析仍可能在后端运行。`, true);
+    cancelBtn.disabled = false;
+  }
 };
 
 const preventDefaults = (event) => {
@@ -532,6 +587,11 @@ const buildTabHash = (tabName, params = new URLSearchParams()) => {
 };
 
 const switchTab = (tabName, options = {}) => {
+  if (tabName === "profile" && !currentUser) {
+    if (!sessionResolved) return;
+    openAuthModal("login");
+    return;
+  }
   $$(".nav-btn").forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === tabName);
   });
@@ -566,17 +626,56 @@ const setupTabs = () => {
 };
 
 const setupPrincipleTabs = () => {
-  $$(".principle-link").forEach((button) => {
+  const links = $$(".principle-link");
+  const sections = $$(".principle-section");
+  const setActivePrincipleSection = (activeSection) => {
+    if (!activeSection) return;
+
+    links.forEach((link) => {
+      link.classList.toggle("active", link.dataset.target === activeSection.id);
+    });
+    sections.forEach((section) => {
+      section.classList.toggle("active", section === activeSection);
+    });
+  };
+
+  const syncPrincipleNavigation = () => {
+    const principlePage = document.getElementById("principle");
+    if (!principlePage?.classList.contains("active")) return;
+
+    // Keep the section whose heading has most recently crossed the fixed header
+    // as the active item, including while smooth scrolling from a navigation click.
+    const readingLine = 108;
+    let activeSection = sections[0];
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= readingLine) {
+        activeSection = section;
+      } else {
+        break;
+      }
+    }
+    setActivePrincipleSection(activeSection);
+  };
+
+  links.forEach((button) => {
     button.addEventListener("click", () => {
       const target = button.dataset.target;
       const activeSection = document.getElementById(target);
-      $$(".principle-link").forEach((item) => item.classList.toggle("active", item === button));
-      $$(".principle-section").forEach((section) => {
-        section.classList.toggle("active", section === activeSection);
-      });
+      setActivePrincipleSection(activeSection);
       activeSection?.scrollIntoView({ block: "start", behavior: "smooth" });
     });
   });
+
+  let scrollFrame = null;
+  window.addEventListener("scroll", () => {
+    if (scrollFrame) return;
+    scrollFrame = window.requestAnimationFrame(() => {
+      scrollFrame = null;
+      syncPrincipleNavigation();
+    });
+  }, { passive: true });
+  window.addEventListener("resize", syncPrincipleNavigation);
+  syncPrincipleNavigation();
 };
 
 const goToAnalyzeCase = (caseId) => {
@@ -632,25 +731,7 @@ const renderCaseRecommendation = () => {
 };
 
 const setupCaseExamples = () => {
-  $$(".explain-card[data-case]").forEach((card) => {
-    const item = caseExamples[card.dataset.case];
-    if (!item) return;
-    const actions = document.createElement("div");
-    actions.className = "case-card-actions";
-    actions.innerHTML = `
-      <button class="primary" type="button" data-case-analyze="${item.id}">去检测中心分析</button>
-      <button class="secondary" type="button" data-case-download="${item.id}">下载样本</button>
-    `;
-    card.appendChild(actions);
-  });
-
   document.addEventListener("click", (event) => {
-    const analyze = event.target.closest("[data-case-analyze]");
-    if (analyze) {
-      goToAnalyzeCase(analyze.dataset.caseAnalyze);
-      return;
-    }
-
     const download = event.target.closest("[data-case-download]");
     if (download) {
       const item = caseExamples[download.dataset.caseDownload];
@@ -672,25 +753,10 @@ const setupCaseExamples = () => {
 };
 
 const setupApiConfig = () => {
-  apiBaseInput.value = window.localStorage.getItem(STORAGE_KEYS.apiBase) || defaultApiBase;
   modelSelect.value = window.localStorage.getItem(STORAGE_KEYS.modelName) || modelSelect.value;
-  updateEndpointDisplay();
-
-  apiBaseInput.addEventListener("input", () => {
-    window.localStorage.setItem(STORAGE_KEYS.apiBase, getApiBase());
-    updateEndpointDisplay();
-  });
 
   modelSelect.addEventListener("change", () => {
     window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
-  });
-
-  $$(".chip[data-api]").forEach((button) => {
-    button.addEventListener("click", () => {
-      apiBaseInput.value = button.dataset.api;
-      window.localStorage.setItem(STORAGE_KEYS.apiBase, getApiBase());
-      updateEndpointDisplay();
-    });
   });
 };
 
@@ -708,6 +774,7 @@ const setupUpload = () => {
   });
 
   dropZone.addEventListener("drop", (event) => {
+    if (analysisRunning) return;
     const [file] = event.dataTransfer.files;
     if (file) setFile(file);
   });
@@ -715,6 +782,12 @@ const setupUpload = () => {
   pcapInput.addEventListener("change", (event) => {
     const [file] = event.target.files;
     if (file) setFile(file);
+  });
+
+  clearFileBtn?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    clearSelectedFile();
   });
 };
 
@@ -727,6 +800,7 @@ const handleStreamEvent = (eventName, data) => {
 
   if (eventName === "delta") {
     const payload = JSON.parse(data);
+    setReportVisible(true);
     latestReportMarkdown += payload.content || "";
     resultEl.innerHTML = renderMarkdown(latestReportMarkdown);
     return;
@@ -736,11 +810,16 @@ const handleStreamEvent = (eventName, data) => {
     const payload = JSON.parse(data);
     const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
     latestReportMarkdown = markdown;
+    setReportVisible(true);
     resultEl.innerHTML = renderMarkdown(markdown);
     setReportDownloadEnabled(true);
     markAllDone();
     setStatus("分析完成。");
     return;
+  }
+
+  if (eventName === "cancelled") {
+    throw new DOMException("分析已由后端取消", "AbortError");
   }
 
   if (eventName === "error") {
@@ -771,33 +850,29 @@ const analyzeSelectedFile = async () => {
     return;
   }
 
-  const apiBase = getApiBase();
-  if (!apiBase) {
-    setStatus("请先配置后端 API 地址。", true);
-    return;
-  }
-
   analysisRunning = true;
   activeController = new AbortController();
+  activeAnalysisId = createAnalysisId();
   setRunControls(true);
   currentStep = null;
-  window.localStorage.setItem(STORAGE_KEYS.apiBase, apiBase);
   window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
-  updateEndpointDisplay();
 
   setStatus("正在上传样本，请勿关闭页面。切换栏目不会中断当前分析。");
   latestReportMarkdown = "";
   setReportDownloadEnabled(false);
+  setReportVisible(false);
   resultEl.textContent = "分析任务运行中，报告将实时显示...";
   resetSteps();
 
   const formData = new FormData();
   formData.append("pcap", selectedFile);
-  formData.append("model_name", modelSelect.value);
+  formData.append("model_id", modelSelect.value);
+  formData.append("analysis_id", activeAnalysisId);
 
   try {
     const response = await fetch(`${apiBase}/analyze/stream`, {
       method: "POST",
+      credentials: "include",
       body: formData,
       signal: activeController.signal,
     });
@@ -830,20 +905,23 @@ const analyzeSelectedFile = async () => {
     if (error instanceof DOMException && error.name === "AbortError") {
       latestReportMarkdown = "";
       setReportDownloadEnabled(false);
+      setReportVisible(false);
       resultEl.textContent = "分析已取消。可以重新选择 PCAP 文件并开始新的分析。";
-      setStatus("当前分析已取消，可以重新选择文件。");
+      setStatus("分析已取消，可重新开始或上传新文件。");
       clearActiveStep();
       return;
     }
     const message = error instanceof Error ? error.message : "分析请求失败";
     latestReportMarkdown = "";
     setReportDownloadEnabled(false);
+    setReportVisible(false);
     resultEl.textContent = "分析失败，请检查后端地址、网络连通性和后端日志。";
     setStatus(message, true);
     markError(currentStep);
   } finally {
     analysisRunning = false;
     activeController = null;
+    activeAnalysisId = null;
     setRunControls(false);
   }
 };
@@ -910,12 +988,198 @@ const renderCaseTable = () => {
   `).join("");
 };
 
+const authModal = $("#auth-modal");
+const loginEntryBtn = $("#login-entry-btn");
+const guestModeBadge = $("#guest-mode-badge");
+const avatarBtn = $("#avatar-btn");
+const logoutBtn = $("#logout-btn");
+const loginForm = $("#login-form");
+const registerForm = $("#register-form");
+const changePasswordForm = $("#change-password-form");
+const changePasswordModal = $("#change-password-modal");
+const changePasswordOpenBtn = $("#change-password-open-btn");
+const changePasswordCloseBtn = $("#change-password-close-btn");
+
+const setFormMessage = (element, message = "", type = "") => {
+  if (!element) return;
+  element.textContent = message;
+  element.classList.toggle("error", type === "error");
+  element.classList.toggle("success", type === "success");
+};
+
+const getApiError = async (response) => {
+  try {
+    const payload = await response.json();
+    return payload.detail || "请求失败，请稍后重试";
+  } catch {
+    return "请求失败，请稍后重试";
+  }
+};
+
+const setAuthMode = (mode) => {
+  const isLogin = mode === "login";
+  $$(".auth-tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.authMode === mode));
+  if (loginForm) loginForm.hidden = !isLogin;
+  if (registerForm) registerForm.hidden = isLogin;
+  setFormMessage($("#login-message"));
+  setFormMessage($("#register-message"));
+};
+
+const openAuthModal = (mode = "login") => {
+  const next = getHashState().tab === "profile" ? "?next=profile" : "";
+  window.location.href = `${mode === "register" ? "register.html" : "login.html"}${next}`;
+};
+
+const closeAuthModal = () => {
+  if (authModal) authModal.hidden = true;
+};
+
+const openChangePasswordModal = () => {
+  if (!changePasswordModal) return;
+  changePasswordModal.hidden = false;
+  changePasswordModal.setAttribute("aria-hidden", "false");
+  changePasswordForm?.querySelector("input")?.focus();
+};
+
+const closeChangePasswordModal = () => {
+  if (!changePasswordModal) return;
+  changePasswordModal.hidden = true;
+  changePasswordModal.setAttribute("aria-hidden", "true");
+  changePasswordForm?.reset();
+  setFormMessage($("#change-password-message"));
+};
+
+const renderAccount = () => {
+  const isLoggedIn = Boolean(currentUser);
+  if (guestModeBadge) guestModeBadge.hidden = isLoggedIn;
+  if (loginEntryBtn) loginEntryBtn.hidden = isLoggedIn;
+  if (avatarBtn) {
+    avatarBtn.hidden = !isLoggedIn;
+    avatarBtn.textContent = isLoggedIn ? currentUser.username.slice(0, 1).toUpperCase() : "";
+    avatarBtn.title = isLoggedIn ? `${currentUser.username} 的个人中心` : "";
+  }
+  if (logoutBtn) logoutBtn.hidden = !isLoggedIn;
+  if (isLoggedIn) {
+    $("#profile-avatar").textContent = currentUser.username.slice(0, 1).toUpperCase();
+    $("#profile-username").textContent = currentUser.username;
+    $("#profile-email").textContent = currentUser.email;
+    const date = new Date(currentUser.created_at);
+    $("#profile-created-at").textContent = Number.isNaN(date.valueOf()) ? "" : `注册时间：${date.toLocaleString("zh-CN")}`;
+  }
+};
+
+const loadSession = async () => {
+  try {
+    const response = await fetch(`${apiBase}/auth/me`, { credentials: "include" });
+    currentUser = response.ok ? await response.json() : null;
+  } catch {
+    currentUser = null;
+  }
+  sessionResolved = true;
+  renderAccount();
+  if (getHashState().tab === "profile") switchTab("profile");
+};
+
+const submitAuthForm = async (form, endpoint, messageElement, successMessage, afterSuccess) => {
+  const payload = Object.fromEntries(new FormData(form).entries());
+  setFormMessage(messageElement);
+  const button = form.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    const response = await fetch(`${apiBase}${endpoint}`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error(await getApiError(response));
+    currentUser = await response.json();
+    renderAccount();
+    setFormMessage(messageElement, successMessage, "success");
+    form.reset();
+    afterSuccess?.();
+  } catch (error) {
+    setFormMessage(messageElement, error instanceof Error ? error.message : "请求失败，请稍后重试", "error");
+  } finally {
+    button.disabled = false;
+  }
+};
+
+const setupAuthentication = () => {
+  loginEntryBtn?.addEventListener("click", () => openAuthModal("login"));
+  changePasswordOpenBtn?.addEventListener("click", openChangePasswordModal);
+  changePasswordCloseBtn?.addEventListener("click", closeChangePasswordModal);
+  changePasswordModal?.addEventListener("click", (event) => {
+    if (event.target === changePasswordModal) closeChangePasswordModal();
+  });
+  $("#auth-close-btn")?.addEventListener("click", closeAuthModal);
+  authModal?.addEventListener("click", (event) => {
+    if (event.target === authModal) closeAuthModal();
+  });
+  $$(".auth-tab").forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
+  avatarBtn?.addEventListener("click", () => switchTab("profile", { push: true }));
+  logoutBtn?.addEventListener("click", async () => {
+    logoutBtn.disabled = true;
+    try {
+      const response = await fetch(`${apiBase}/auth/logout`, { method: "POST", credentials: "include" });
+      if (!response.ok) throw new Error("退出登录失败，请稍后重试");
+      currentUser = null;
+      renderAccount();
+      window.location.href = "login.html";
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "退出登录失败，请稍后重试");
+    } finally {
+      logoutBtn.disabled = false;
+    }
+  });
+  loginForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitAuthForm(loginForm, "/auth/login", $("#login-message"), "登录成功", closeAuthModal);
+  });
+  registerForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitAuthForm(registerForm, "/auth/register", $("#register-message"), "注册成功，已登录", () => {
+      closeAuthModal();
+      switchTab("home", { push: true });
+    });
+  });
+  changePasswordForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const message = $("#change-password-message");
+    const payload = Object.fromEntries(new FormData(changePasswordForm).entries());
+    if (payload.new_password !== payload.confirm_new_password) {
+      setFormMessage(message, "两次输入的新密码不一致", "error");
+      return;
+    }
+    const button = changePasswordForm.querySelector("button[type=submit]");
+    button.disabled = true;
+    try {
+      const response = await fetch(`${apiBase}/auth/change-password`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      });
+      if (!response.ok) throw new Error(await getApiError(response));
+      changePasswordForm.reset();
+      currentUser = null;
+      renderAccount();
+      setFormMessage(message, "密码已更新，请重新登录", "success");
+      window.setTimeout(() => { switchTab("home", { push: true }); openAuthModal("login"); }, 700);
+    } catch (error) {
+      setFormMessage(message, error instanceof Error ? error.message : "修改失败，请稍后重试", "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+  loadSession();
+};
+
 setupTabs();
 setupPrincipleTabs();
 setupApiConfig();
 setupUpload();
 setupCaseExamples();
 renderCaseTable();
+setupAuthentication();
+setReportVisible(false);
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
 cancelBtn?.addEventListener("click", cancelAnalysis);
 downloadReportBtn?.addEventListener("click", downloadReport);

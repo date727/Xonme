@@ -223,7 +223,10 @@ vim .env
 # SiliconFlow API 配置（或其他 OpenAI 兼容 API）
 SILICONFLOW_BASE_URL=https://api.siliconflow.cn
 SILICONFLOW_API_KEY=sk-your-api-key-here
-SILICONFLOW_MODEL=your-favorite-model
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=your-openai-api-key
+DEFAULT_MODEL_ID=deepseek-v4-flash
+
 ```
 
 #### 构建 RAG 知识库（首次运行）
@@ -251,19 +254,20 @@ python build_knowledge_base.py
 
 #### 启动后端服务
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8765 --reload
 ```
 
-后端将监听 `http://127.0.0.1:8000`
+后端服务监听 `http://127.0.0.1:8765`。
 
 ### 3. 启动前端
 
 ```bash
 cd frontend
-python3 -m http.server 5500
+python3 dev_server.py
 ```
 
-然后在浏览器访问 `http://127.0.0.1:5500`
+然后在浏览器访问 `http://127.0.0.1:5500`。前端会自动使用相同 IP 的 `8765` 端口访问后端，无需配置后端地址。
+该开发服务器会禁用浏览器缓存；保存 CSS、HTML 或 JavaScript 后，直接刷新页面即可看到最新内容，无需手动修改 URL 版本号。
 
 ### 4. 验证部署
 
@@ -285,7 +289,7 @@ python3 -m http.server 5500
    - 在 Web 界面拖拽上传 PCAP 文件
    - 或使用 API：
      ```bash
-     curl -X POST http://127.0.0.1:8000/analyze \
+     curl -X POST http://127.0.0.1:8765/analyze \
        -F "pcap=@your_traffic.pcap"
      ```
 
@@ -303,7 +307,7 @@ python3 -m http.server 5500
 
 ```bash
 # 启动后端时查看日志
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8765 --reload
 
 # 日志示例：
 # ⏳ RITA: importing logs from /path/to/outputs/xxx ...
@@ -373,9 +377,9 @@ cp models/* ../backend/app/models/
 - 如果仍然过滤过严，可以降低 `MIN_BEACON_SCORE` 等阈值
 
 ### Q4: 前端无法连接后端？
-**A**: 检查 CORS 配置。后端 `main.py` 中已配置 `allow_origins=["*"]`，如果仍有问题：
-- 确认后端在 `http://127.0.0.1:8000` 运行
-- 检查前端 `app.js` 中的 `API_BASE_URL` 配置
+**A**: 前端会自动使用当前访问 IP 的 `8765` 端口连接后端。如果仍有问题：
+- 确认后端在 `http://127.0.0.1:8765` 运行
+- 确认前端通过 `http://127.0.0.1:5500` 提供，而非直接双击 `frontend/index.html`
 
 ### Q5: ChromaDB 报错？
 **A**: 首次运行需要构建知识库：
