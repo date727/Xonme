@@ -48,17 +48,15 @@ class ThreatFeatureMerger:
         
         # 2. 从 LSTM 获取的威胁
         lstm_connections = self._get_lstm_connections()
+        rita_connections = self._align_rita_wildcard_destinations(
+            rita_connections, lstm_connections
+        )
         
         # 3. 构建连接索引（src, dst, port）
         all_connection_keys: Set[Tuple] = set()
         
         # 添加 RITA 检测的连接
-        for feature in self.rita_features:
-            key = (
-                feature.get('src_ip', ''),
-                feature.get('dst_ip', ''),
-                str(feature.get('dst_port', '')),
-            )
+        for key in rita_connections:
             all_connection_keys.add(key)
         
         # 添加 LSTM 检测的连接
@@ -78,6 +76,7 @@ class ThreatFeatureMerger:
                 'src_ip': src,
                 'dst_ip': dst,
                 'dst_port': port,
+                'protocol': '',
                 'detection_sources': [],  # 记录检测来源
             }
             
@@ -108,6 +107,7 @@ class ThreatFeatureMerger:
             if conn_key in lstm_connections:
                 lstm_feature = lstm_connections[conn_key]
                 feature.update({
+                    'protocol': lstm_feature.get('proto', ''),
                     'lstm_confidence': lstm_feature.get('confidence', 0.0),
                     'lstm_risk': lstm_feature.get('risk', 'Unknown'),
                 })
@@ -174,6 +174,27 @@ class ThreatFeatureMerger:
             connections[key] = beacon
         
         return connections
+
+    @staticmethod
+    def _align_rita_wildcard_destinations(
+        rita_connections: Dict[Tuple, Dict],
+        lstm_connections: Dict[Tuple, Dict],
+    ) -> Dict[Tuple, Dict]:
+        """Align RITA's ``::`` destination with one unambiguous LSTM flow."""
+        aligned = dict(rita_connections)
+        wildcard_destinations = {"", "::", "unknown", "-"}
+        for key, value in list(rita_connections.items()):
+            src, dst, port = key
+            if str(dst).strip().lower() not in wildcard_destinations:
+                continue
+            matches = [
+                candidate for candidate in lstm_connections
+                if candidate[0] == src and candidate[2] == port
+            ]
+            if len(matches) == 1:
+                aligned.pop(key, None)
+                aligned[matches[0]] = value
+        return aligned
     
     @staticmethod
     def _threat_priority(category: str) -> int:

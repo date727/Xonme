@@ -1,0 +1,13 @@
+{
+  "threshold": 0.9998542070388794,
+  "selected_on": "validation_window",
+  "target_recall": 0.98,
+  "maximum_fpr": 0.05,
+  "c2_class_weight_multiplier": 1.0,
+  "target_recall_met": true,
+  "target_fpr_met": true,
+  "selection_mode": "constraints_met",
+  "validation_recall": 0.9817073170731707,
+  "validation_fpr": 0.0,
+  "selected_seed": 2029
+}

@@ -291,6 +291,102 @@ def run_zeek(pcap_path: str, output_dir: Path, *, job: AnalysisJob | None = None
     run_command(["zeek", "readpcap", pcap_path, str(output_dir)], job=job)
 
 
+def _build_sample_rag_context(
+    rag_engine: ThreatAttributionEngine,
+    merged_features: list[dict],
+    *,
+    job: AnalysisJob | None = None,
+) -> tuple[str, list[dict]]:
+    """Build an auditable, sample-level RAG context for every suspicious flow.
+
+    A PCAP can contain more than one suspicious connection.  This deliberately
+    performs a separate retrieval for each merged RITA/LSTM feature instead of
+    selecting the first item in ``merged_features``.  The returned text is both
+    supplied to the LLM and appended to the final report as a deterministic
+    evidence appendix, so no detected connection can be silently omitted by
+    report generation.
+    """
+    results: list[dict] = []
+    lines = [
+        f"本样本共检出 **{len(merged_features)}** 条唯一可疑连接。",
+        "以下编号是该样本内的连接编号；每条连接均已独立完成 RAG 检索。",
+    ]
+
+    for index, feature in enumerate(merged_features, 1):
+        _raise_if_cancelled(job)
+        sources = feature.get("detection_sources") or []
+        if isinstance(sources, str):
+            sources = [item for item in sources.split(";") if item]
+        source_text = " + ".join(sources) if sources else "未知"
+        endpoint = (
+            f"{feature.get('src_ip') or 'unknown'} → "
+            f"{feature.get('dst_ip') or 'unknown'}:"
+            f"{feature.get('dst_port') or 'unknown'}"
+        )
+        try:
+            beacon_score = float(feature.get("beacon_score") or 0)
+        except (TypeError, ValueError):
+            beacon_score = 0.0
+        try:
+            lstm_confidence = float(feature.get("lstm_confidence") or 0)
+        except (TypeError, ValueError):
+            lstm_confidence = 0.0
+
+        try:
+            result = rag_engine.attribute_single_threat(feature)
+            results.append(result)
+            candidates = result.get("candidates") or []
+            techniques = result.get("matched_techniques") or []
+
+            lines.extend(
+                [
+                    f"\n### 可疑连接 {index}",
+                    f"- **连接**：{endpoint}（协议：{feature.get('protocol') or 'unknown'}）",
+                    f"- **检测来源**：{source_text}",
+                    f"- **RITA Beacon 评分**：{beacon_score:.1f}/100",
+                    f"- **LSTM 置信度**：{lstm_confidence:.1f}%",
+                    "- **ATT&CK 技术**："
+                    + (", ".join(techniques) if techniques else "未从检索结果中确定"),
+                ]
+            )
+            if candidates:
+                candidate_text = "; ".join(
+                    f"{candidate.get('name', 'unknown')} "
+                    f"({float(candidate.get('score') or 0):.3f})"
+                    for candidate in candidates[:3]
+                )
+                lines.append(f"- **RAG 候选组织（Top-{min(3, len(candidates))}）**：{candidate_text}")
+                lines.append(
+                    "- **归因说明**：候选反映知识库语义相似度，不等同于已确认的攻击组织。"
+                )
+            else:
+                lines.append("- **RAG 候选组织**：未检索到可用候选。")
+        except AnalysisCancelled:
+            raise
+        except Exception as exc:
+            # One malformed connection must not hide the rest of the sample.
+            print(f"RAG: retrieval failed for threat {index}/{len(merged_features)} - {exc}")
+            lines.extend(
+                [
+                    f"\n### 可疑连接 {index}",
+                    f"- **连接**：{endpoint}（协议：{feature.get('protocol') or 'unknown'}）",
+                    f"- **检测来源**：{source_text}",
+                    f"- **RITA Beacon 评分**：{beacon_score:.1f}/100",
+                    f"- **LSTM 置信度**：{lstm_confidence:.1f}%",
+                    "- **RAG 状态**：该连接检索失败；其检测证据仍保留在本报告中。",
+                ]
+            )
+
+    return "\n".join(lines), results
+
+
+def _rag_evidence_appendix(rag_context: str | None) -> str:
+    """Return a deterministic report appendix containing all detected flows."""
+    if not rag_context:
+        return ""
+    return f"\n\n---\n\n## 附录：系统生成的全量可疑连接与 RAG 检索证据\n\n{rag_context}"
+
+
 def _build_ai_request(
     csv_text: str,
     lstm_results: dict | None = None,
@@ -323,12 +419,14 @@ def _build_ai_request(
     
     if rag_context:
         prompt += (
-            "\n以下是 ATT&CK 溯源上下文，请用于丰富分析：\n"
+            "\n以下是系统对该样本全部可疑连接生成的 ATT&CK/RAG 证据。"
+            "它是检测结论的事实依据，不得遗漏其中任一编号连接：\n"
             f"{rag_context}\n\n"
-            "请在报告中新增第 5 节“威胁归因”，至少包括：\n"
-            "- 最可能的 APT 组织或组织集合\n"
-            "- 对应的 MITRE ATT&CK 技术编号\n"
-            "- 你的置信度与需要保留的 caveat\n"
+            "请在报告中新增以下章节：\n"
+            "5. **可疑连接全量分析** - 按连接编号逐条说明检测来源、关键行为和风险；"
+            "不得只分析第一条连接。\n"
+            "6. **威胁归因** - 汇总 ATT&CK 技术和候选组织；明确候选组织仅为线索，"
+            "不得将语义检索结果表述为已确认归因。\n"
         )
 
     if lstm_results and lstm_results.get("total_flagged", 0) > 0:
@@ -385,7 +483,8 @@ def generate_ai_analysis(
 
     data = response.json()
     try:
-        return data["choices"][0]["message"]["content"].strip()
+        report = data["choices"][0]["message"]["content"].strip()
+        return report + _rag_evidence_appendix(rag_context)
     except (KeyError, IndexError, AttributeError) as exc:
         raise HTTPException(
             status_code=502, detail="Unexpected SiliconFlow response format"
@@ -624,14 +723,14 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     csv_path = OUTPUTS_DIR / f"{name}.csv"
     csv_path.write_text(csv_text, encoding="utf-8")
 
-    # The current model is trained for HTTP/HTTPS, so DNS and other traffic
-    # stays in the RITA/RAG path instead of being sent to the LSTM.
+    # The LSTM consumes reconstructed TCP connection events directly from the
+    # capture. DNS/UDP traffic remains on the RITA/RAG path.
     lstm_results = None
     if _LSTM_AVAILABLE:
         try:
             from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
 
-            print("LSTM: extracting HTTP/HTTPS timing features from PCAP packet timestamps")
+            print("LSTM: extracting all-TCP connection timing features from PCAP packet timestamps")
             lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
             if lstm_csv_text:
@@ -669,19 +768,19 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
                 if not merged_features:
                     print("RAG: no threats found after merging, skipping attribution")
                 else:
-                    print("RAG: merged features ready, searching knowledge base...")
+                    print(
+                        f"RAG: merged features ready ({len(merged_features)} unique threats), "
+                        "searching knowledge base for every threat..."
+                    )
                     rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
-                    rag_result = rag_engine.attribute_single_threat(merged_features[0])
-
-                    if rag_result["candidates"]:
-                        primary = rag_result["primary_candidate"]
-                        print(
-                            f"RAG: matched! primary={primary['name']}, "
-                            f"confidence={rag_result['confidence']:.1f}%"
-                        )
-                        rag_context = rag_engine.generate_attribution_report(rag_result)
-                    else:
-                        print("RAG: no matching APT group found in knowledge base")
+                    rag_context, rag_results = _build_sample_rag_context(
+                        rag_engine, merged_features
+                    )
+                    matched_count = sum(bool(result.get("candidates")) for result in rag_results)
+                    print(
+                        f"RAG: completed {len(merged_features)} threat retrieval(s), "
+                        f"{matched_count} with candidate groups"
+                    )
             else:
                 print("RAG: no threats detected by RITA or LSTM, skipping attribution")
         except Exception as exc:
@@ -808,7 +907,7 @@ async def analyze_pcap_stream(
                 try:
                     from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
 
-                    print("LSTM: extracting HTTP/HTTPS timing features from PCAP packet timestamps")
+                    print("LSTM: extracting all-TCP connection timing features from PCAP packet timestamps")
                     lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
                     if lstm_csv_text:
@@ -865,23 +964,17 @@ async def analyze_pcap_stream(
                                 f"RAG: searching for matching APT groups (top-{rag_engine.top_k})..."
                             )
 
-                            rag_result = rag_engine.attribute_single_threat(
-                                merged_features[0]
+                            rag_context, rag_results = _build_sample_rag_context(
+                                rag_engine, merged_features, job=job
                             )
                             _raise_if_cancelled(job)
-
-                            if rag_result["candidates"]:
-                                primary = rag_result["primary_candidate"]
-                                print(
-                                    f"RAG: matched! primary={primary['name']}, "
-                                    f"confidence={rag_result['confidence']:.1f}%, "
-                                    f"candidates={len(rag_result['candidates'])}"
-                                )
-                                rag_context = rag_engine.generate_attribution_report(
-                                    rag_result
-                                )
-                            else:
-                                print("RAG: no matching APT group found in knowledge base")
+                            matched_count = sum(
+                                bool(result.get("candidates")) for result in rag_results
+                            )
+                            print(
+                                f"RAG: completed {len(merged_features)} threat retrieval(s), "
+                                f"{matched_count} with candidate groups"
+                            )
                     else:
                         print("RAG: no threats detected by RITA or LSTM, skipping attribution")
                 except AnalysisCancelled:
@@ -910,6 +1003,7 @@ async def analyze_pcap_stream(
                 )
 
             analysis_markdown = "".join(chunks)
+            analysis_markdown += _rag_evidence_appendix(rag_context)
             if record_id:
                 finish_analysis_record(
                     record_id,

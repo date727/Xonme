@@ -137,6 +137,9 @@ def _build_sequences(
                     "dst": first.get("dst_ip", "?"),
                     "port": first.get("dst_port", "?"),
                     "proto": first.get("ip_protocol", "?"),
+                    "event_count": seq_len,
+                    "flow_gap": _safe_float(first.get("flow_gap", "0")),
+                    "gap_cv": _safe_float(first.get("gap_rolling_cv", "0")),
                 }
             )
 
@@ -214,7 +217,15 @@ def _deduplicate_beacons(beacons: list[dict]) -> list[dict]:
     return sorted(seen.values(), key=lambda item: item["confidence"], reverse=True)
 
 
-def predict_beacons(csv_text: str, threshold: float = 0.5) -> Optional[dict]:
+def _default_threshold() -> float:
+    """Use the validation-selected threshold embedded in the model metadata."""
+    try:
+        return float(_metadata.get("threshold", 0.5))
+    except (AttributeError, TypeError, ValueError):
+        return 0.5
+
+
+def predict_beacons(csv_text: str, threshold: float | None = None) -> Optional[dict]:
     """Run LSTM detection on LSTM feature CSV text."""
     extracted = _extract_features(csv_text)
     if extracted is None:
@@ -225,6 +236,7 @@ def predict_beacons(csv_text: str, threshold: float = 0.5) -> Optional[dict]:
         return None
 
     n_rows, seq_len, feature_count = sequences.shape
+    threshold = _default_threshold() if threshold is None else threshold
 
     try:
         flat = sequences.reshape(-1, feature_count)
@@ -251,6 +263,9 @@ def predict_beacons(csv_text: str, threshold: float = 0.5) -> Optional[dict]:
                     "proto": info.get("proto", "?"),
                     "confidence": round(float(probability) * 100, 1),
                     "risk": _risk_level(float(probability)),
+                    "event_count": info["event_count"],
+                    "flow_gap": round(info["flow_gap"], 3),
+                    "gap_cv": round(info["gap_cv"], 3),
                 }
             )
 
@@ -262,12 +277,12 @@ def predict_beacons(csv_text: str, threshold: float = 0.5) -> Optional[dict]:
 
     if total_flagged:
         summary = (
-            f"The LSTM beacon detection model analyzed {unique_connections} HTTP/HTTPS "
+            f"The all-TCP LSTM beacon detection model analyzed {unique_connections} "
             f"connection groups and flagged **{total_flagged}** as potential C2 beacons."
         )
     else:
         summary = (
-            f"The LSTM beacon detection model analyzed {unique_connections} HTTP/HTTPS "
+            f"The all-TCP LSTM beacon detection model analyzed {unique_connections} "
             f"connection groups and found no beacon-like activity."
         )
 
