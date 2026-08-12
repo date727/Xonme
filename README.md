@@ -1,431 +1,406 @@
-# C2Sherlock：面向隐蔽C2通信的智能检测与溯源系统
+# C2Sherlock：隐蔽 C2 通信检测与辅助溯源系统
 
-C2Sherlock 是一个集成了多层检测技术的网络威胁分析平台，专注于识别和溯源隐蔽的 C2（Command and Control）通信。系统结合了传统网络分析工具、深度学习模型和威胁情报检索，为安全分析人员提供自动化的威胁检测与归因能力。
+C2Sherlock 是一个面向 PCAP 流量的 C2（Command and Control，命令与控制）分析系统。它将 Zeek、RITA、基于 LSTM 的 TCP Beacon 时序检测、MITRE ATT&CK RAG 检索与大模型报告生成整合到同一条分析链路中。
 
-## 系统架构
+系统的目标不是仅凭单个指标断言攻击，而是将统计检测、连接时序行为与威胁情报检索作为相互补充的证据，帮助分析人员优先定位和核查可疑通信。
+
+## 当前分析流程
 
 ```mermaid
-graph TB
-    A[📦 PCAP 文件] --> B[🔍 Zeek 网络流量解析]
-    
-    B --> C1[conn.log]
-    B --> C2[dns.log]
-    B --> C3[http.log]
-    B --> C4[ssl.log]
-    
-    C1 --> D[📊 RITA 分析引擎]
-    C2 --> D
-    C3 --> D
-    C4 --> D
-    
-    C1 --> E[🧠 LSTM 检测引擎]
-    
-    D --> D1[RITA 检测结果<br/>Beacon Score<br/>可疑连接列表]
-    
-    E --> E1[LSTM 检测结果<br/>Beacon 列表<br/>置信度评分]
-    
-    D1 --> F[🔄 威胁特征合并器<br/>纯检测结果合并]
-    E1 --> F
-    
-    F --> F1[合并威胁列表<br/>RITA ∪ LSTM<br/>去重 + 特征增强]
-    
-    F1 --> G[🎯 RAG 威胁溯源<br/>基于检测结果<br/>无需原始日志]
-    
-    G --> G1[APT 组织匹配<br/>MITRE ATT&CK 技术<br/>归因置信度]
-    
-    D1 --> H[🤖 AI 综合分析]
-    E1 --> H
-    G1 --> H
-    
-    H --> I[📄 威胁报告]
-    
-    style A fill:#e3f2fd
-    style B fill:#f3e5f5
-    style C1 fill:#fff9c4
-    style C2 fill:#fff9c4
-    style C3 fill:#fff9c4
-    style C4 fill:#fff9c4
-    style D fill:#e8f5e9
-    style E fill:#fce4ec
-    style F fill:#ffebee
-    style G fill:#fff3e0
-    style H fill:#e0f2f1
-    style I fill:#f1f8e9
-    
-    classDef independent stroke:#4caf50,stroke-width:3px
-    class D,E independent
-    
-    classDef noZeek stroke:#2196f3,stroke-width:3px,stroke-dasharray: 5 5
-    class F,G noZeek
+flowchart TD
+    P["上传 PCAP / PCAPNG"] --> S["创建本次分析任务\n保存原始抓包"]
+
+    subgraph ZP [协议解析与统计检测路径]
+        S --> Z["Zeek 解析"]
+        Z --> ZL["conn.log / dns.log / http.log / ssl.log"]
+        ZL --> RI["RITA import\n导入 Zeek 日志"]
+        RI --> RV["RITA view\nBeacon 等统计结果"]
+        RV --> RE["RITA 威胁特征提取"]
+        ZL -.->|RITA 不可用时| FB["回退：Zeek 日志作为报告输入"]
+    end
+
+    subgraph LP [独立 LSTM 时序检测路径]
+        S --> TCP["过滤 TCP 报文\n重建双向连接"]
+        TCP --> FE["每次连接提取 24 维特征\n间隔、规模、方向、包 IAT"]
+        FE --> GR["按通信组分组并按时间排序\n源IP、目的IP、目的端口、协议"]
+        GR --> Q{"通信组是否至少有 10 次连接"}
+        Q -->|是| WIN["滑动窗口\n10 次连接 × 24 特征"]
+        WIN --> SC["加载 scaler.pkl\n按训练尺度标准化"]
+        SC --> LM["加载 Keras LSTM 模型\n输出每个窗口的 C2 分数 p"]
+        LM --> AG["同一通信组取最高分\n按 p ≥ 0.99 判定"]
+        Q -->|否| SK["无可用 LSTM 序列\n记录为未完成，不等同于良性"]
+    end
+
+    RE --> MT["RITA / LSTM 威胁特征合并\n按源IP、目的IP、端口去重"]
+    AG --> MT
+    MT --> RC{"是否存在待核查连接"}
+    RC -->|是| RAG["MITRE ATT&CK RAG\n检索技术与候选组织"]
+    RC -->|否| NR["跳过 RAG 检索"]
+
+    RV --> AI["大模型生成中文 Markdown 报告"]
+    FB --> AI
+    AG --> AI
+    SK --> AI
+    RAG --> AI
+    NR --> AI
+    AI --> AP["系统追加 LSTM 检测附录\n命中 / 未命中 / 未完成"]
+    AP --> RP["系统追加 RAG 证据附录（如有）"]
+    RP --> O["输出 / 流式展示智能分析报告"]
+
+    classDef input fill:#e3f2fd,stroke:#1565c0
+    classDef zeek fill:#f3e5f5,stroke:#7b1fa2
+    classDef lstm fill:#fce4ec,stroke:#c2185b
+    classDef rag fill:#fff3e0,stroke:#ef6c00
+    classDef output fill:#e8f5e9,stroke:#2e7d32
+    class P,S input
+    class Z,ZL,RI,RV,RE,FB zeek
+    class TCP,FE,GR,Q,WIN,SC,LM,AG,SK lstm
+    class MT,RC,RAG,NR rag
+    class AI,AP,RP,O output
 ```
 
-## 核心功能
+其中 RITA 与 LSTM 独立工作：
 
-### 1. **多层检测引擎**
-- **Zeek**: 深度网络流量解析，生成 conn、DNS、HTTP、SSL/TLS 协议日志
-- **RITA**: 基于统计的 beacon 检测，识别周期性通信模式
-- **LSTM 模型**: 基于 ARES 数据集训练的深度学习模型，使用包间到达时间（IAT）特征进行时序分类
-  - 输入特征: 15 维 `iat_oresp_*`（total, min, max, mean, stddev, nf_0~nf_9）
-  - 检测目标: HTTP beacon、TCP C2 通信
-  - 输出: 置信度评分 + 风险等级（Critical/High/Medium/Low）
+- RITA 基于 Zeek 日志进行统计型 Beacon 分析。
+- LSTM 直接从原始 PCAP 重建 TCP 连接并提取时序特征，**不依赖 RITA 的特征导出**；DNS/UDP 流量仍由 Zeek、RITA 与 RAG 路径覆盖。
+- RAG 对 RITA/LSTM 合并后的可疑通信检索 MITRE ATT&CK 知识库，提供技术与候选组织线索；候选组织不是已确认归因。
 
-### 2. **RAG 威胁溯源**
-- 基于 MITRE ATT&CK STIX 2.1 数据集构建知识库
-- 使用 ChromaDB + Sentence-Transformers 进行语义检索
-- 从 RITA/Zeek 日志中提取威胁特征（beacon 评分、DNS 异常、TLS 指纹等）
-- 匹配 APT 组织的 TTP（Tactics, Techniques, and Procedures）
-- 输出归因结果：APT 组织名称、匹配的 ATT&CK 技术、置信度
+## LSTM Beacon 检测
 
-### 3. **智能分析报告**
-- 集成 SiliconFlow API（支持 Qwen/DeepSeek 等大模型）
-- 自动生成结构化 Markdown 报告：
-  - **Executive Summary**: 高层概述
-  - **Key Threats Identified**: 关键威胁详情
-  - **Risk Assessment**: 风险评级
-  - **Threat Attribution**: APT 组织归因（基于 RAG 结果）
-  - **Recommended Actions**: 处置建议
+### 检测对象与输入
 
-### 4. **友好的 Web 界面**
-- 拖拽上传 PCAP 文件
-- 实时显示分析进度（Zeek → RITA → LSTM → RAG → AI）
-- Markdown 渲染威胁报告
-- 支持导出分析结果
+LSTM 面向 TCP 连接序列中的 Beacon 行为。一次 TCP 连接是一行数据；同一通信关系按下列字段分组并按开始时间排序：
+
+```text
+source_file + src_ip + dst_ip + dst_port + ip_protocol
+```
+
+每连续 10 次连接构成一个窗口，因此模型输入形状为：
+
+```text
+10 个时间步 × 24 个特征
+```
+
+少于 10 次连接的通信组不能组成完整窗口，LSTM 会跳过该组；这不等于该通信安全。训练阶段中，单个超长通信组最多均匀抽取 200 个窗口，以免某一抓包主导训练。
+
+### 24 维特征
+
+| 类别 | 数量 | 字段 | 用途 |
+|---|---:|---|---|
+| 连接间规律 | 7 | `flow_gap`、`log_flow_gap`、最近 5 次间隔的均值/标准差/CV/中位数/IQR | 判断重连周期及其波动程度。 |
+| 连接规模与方向 | 7 | `duration`、收发包数、收发字节数、包数比例、字节比例 | 描述一次会话的规模及收发模式。 |
+| 连接内部包间隔 | 9 | `packet_iat_min/max/mean/stddev`、`packet_iat_0`～`packet_iat_4` | 描述会话内的请求—响应节奏，辅助区分仅在跨连接周期上相似的正常心跳与 C2。 |
+| 方向可靠度 | 1 | `direction_confidence` | 标记能否通过 TCP SYN 可靠识别发起方。 |
+
+特征由 [backend/app/pcap_lstm_feature_extractor.py](backend/app/pcap_lstm_feature_extractor.py) 生成。训练集拟合并保存 `StandardScaler`，验证、测试和线上推理复用同一个 `scaler.pkl`，防止数据尺度不一致和数据泄漏。
+
+### 模型与阈值
+
+模型结构为：
+
+```text
+LSTM(32) → Dropout(0.4) → LSTM(16) → Dropout(0.4)
+→ Dense(32, ReLU) → Dense(1, Sigmoid)
+```
+
+- 损失函数：二分类交叉熵（Binary Cross-Entropy）。
+- 优化器：Adam，学习率 `0.001`。
+- 正则化：L2 与 Dropout，减少过拟合。
+- 训练：5 个固定随机种子重复训练，以验证集选择部署模型；测试集只用于最终评估。
+
+当前部署阈值为 **`0.99`**，保存在 `decision_threshold.json` 中。该阈值是模型输出分数 `p` 转化为告警的标准：`p ≥ 0.99` 时，通信组被标记为潜在 C2 Beacon。
+
+> `decision_threshold.json` 是阈值唯一来源。后端与离线预测脚本都会读取该文件；不要只改 `model_metadata.json` 的内容。
+
+模型工件必须作为一个整体部署：
+
+```text
+beacon_lstm_model.keras  # 模型权重与结构
+scaler.pkl               # 训练集标准化规则
+model_metadata.json      # 特征顺序、窗口长度、输入形状等元数据
+decision_threshold.json  # 部署阈值及其选择记录
+```
+
+后端加载时会校验模型输入形状、Scaler 特征数、元数据和阈值文件的一致性；不匹配时将禁用 LSTM 检测，而不会静默给出不可信结果。
+
+### LSTM 结果如何写入报告
+
+每份智能报告都会包含系统生成的“LSTM 时序检测结果”附录：
+
+- **命中**：列出达到阈值的通信关系、置信度和风险等级；在当前 `0.99` 阈值下，命中项均为 `Critical`。
+- **未命中**：明确说明已完成 LSTM 分析但没有通信组达到告警阈值，不会把“未命中”表述为绝对安全。
+- **未完成**：若模型不可用、特征提取失败或没有足够长的通信组，报告会显示未完成，避免误判为良性。
+
+报告的总体发现只应在开头“执行摘要”集中说明；系统附录保留逐条证据，不重复输出“共检出 X 条可疑连接”式的汇总。
 
 ## 项目结构
 
-```
-C2Sherlock/
-├── frontend/                # Web 前端
-│   ├── index.html          # 主页面
-│   ├── app.js              # 前端逻辑（文件上传、进度显示）
-│   └── styles.css          # 样式
-│
-├── backend/                # FastAPI 后端
+```text
+Xonme/
+├── frontend/                         # 静态 Web 前端
+│   ├── index.html                    # 主分析页面
+│   ├── app.js                        # 上传、SSE 进度与报告展示
+│   └── dev_server.py                 # 禁用缓存的本地开发服务器
+├── backend/
 │   ├── app/
-│   │   ├── main.py                     # API 入口（/analyze 接口）
-│   │   ├── lstm_predictor.py           # LSTM beacon 检测
-│   │   ├── rita_feature_exporter.py    # RITA ClickHouse 特征导出
-│   │   ├── data_extractor.py           # RITA/Zeek 威胁特征提取
-│   │   ├── rag_engine.py               # RAG 威胁溯源引擎
-│   │   ├── attribution_prompts.py      # RAG prompt 模板
-│   │   ├── feature_encoder.py          # 威胁特征编码器
-│   │   ├── knowledge_base/
-│   │   │   ├── stix_parser.py          # MITRE ATT&CK STIX 解析
-│   │   │   └── vector_db.py            # ChromaDB 向量数据库
-│   │   └── models/
-│   │       ├── beacon_lstm_model.keras # 训练好的 LSTM 模型
-│   │       ├── scaler.pkl              # StandardScaler
-│   │       └── model_metadata.json     # 模型元数据
-│   ├── requirements.txt
-│   └── .env.example
-│
-├── LSTM/                   # LSTM 模型训练模块
-│   ├── src/
-│   │   ├── data_prep.py    # 数据预处理
-│   │   ├── model.py        # LSTM 模型定义
-│   │   ├── train.py        # 训练脚本
-│   │   └── predict.py      # 预测脚本
-│   ├── config.py           # 超参数配置
-│   ├── requirements.txt
-│   └── README.md
-│
-└── README.md               # 本文件
+│   │   ├── main.py                   # FastAPI API 与主分析流水线
+│   │   ├── pcap_lstm_feature_extractor.py  # PCAP → 24 维 TCP 连接特征
+│   │   ├── lstm_predictor.py         # 后端 LSTM 推理与报告格式化
+│   │   ├── threat_feature_merger.py  # RITA / LSTM 结果合并
+│   │   ├── data_extractor.py         # RITA 威胁特征提取
+│   │   ├── rag_engine.py             # ATT&CK RAG 检索
+│   │   ├── report_export.py          # 报告导出
+│   │   └── models/                   # 已部署的 LSTM 工件
+│   ├── build_knowledge_base.py       # 构建 ChromaDB ATT&CK 知识库
+│   └── requirements.txt
+├── LSTM/
+│   ├── data/                         # 原始 PCAP 与 split_manifest.csv
+│   ├── feature_data/                 # 由 PCAP 提取的训练/验证/测试特征 CSV
+│   ├── models/                       # 训练产物
+│   ├── logs/                         # 训练历史、评估与假阴性记录
+│   ├── config.py                     # 训练与特征配置
+│   └── src/
+│       ├── prepare_pcap_dataset.py   # PCAP → 标注特征 CSV
+│       ├── data_prep.py              # 构造通信组与时序窗口、标准化
+│       ├── model.py                  # LSTM 网络定义
+│       ├── train.py                  # 重复训练、验证集选模型与阈值
+│       └── predict.py                # 离线推理 / 评估
+└── README.md
 ```
 
 ## 环境要求
 
-### 系统依赖
-- **操作系统**: Linux
-- **Python**: ≥ 3.10
-- **Zeek**: ≥ 8.0.6 (网络流量分析引擎)
-- **RITA**: v5+ (Real Intelligence Threat Analytics)
-- **Docker**: 用于运行 RITA ClickHouse 数据库
+- Python 3.10+（建议为后端和训练模块各建一个虚拟环境）
+- Zeek：解析 PCAP 并生成协议日志
+- RITA v5+：统计型 Beacon 分析，需要对应 ClickHouse 服务
+- Docker：若使用容器化 RITA/ClickHouse
+- 可访问的大模型 API：用于生成智能报告
 
-### Python 依赖
-见 `backend/requirements.txt` 和 `LSTM/requirements.txt`
+Zeek/RITA 常在 Linux 或 WSL 环境部署。Windows 本地开发时，请确保 `zeek`、`rita` 命令可从后端进程的 `PATH` 调用。
 
-## 部署指南
+Python 依赖分别见：
 
-### 1. 安装系统依赖
-
-#### 安装 Zeek
-
-见 [Zeek](https://github.com/zeek/zeek#getting-started)
-
-#### 安装 RITA
-
-见 [RITA](https://github.com/activecm/rita#quick-start)
-
-#### 修改 RITA 配置（重要！）
-为了分析内网流量，需要修改 RITA 的过滤配置：
-
-```bash
-# 备份原配置
-sudo cp /etc/rita/config.hjson /etc/rita/config.hjson.bak
-
-# 编辑配置文件
-sudo vim /etc/rita/config.hjson
+```text
+backend/requirements.txt
+LSTM/requirements.txt
 ```
 
-找到 `"filtering"` 部分，修改为：
-```hjson
-"filtering": {
-    "internal_subnets": [
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "fd00::/8"
-    ],
-    # 关键：添加 always_included_subnets 强制包含内网流量
-    "always_included_subnets": [
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16"
-    ],
-    "always_included_domains": [],
-    "never_included_subnets": [],
-    "never_included_domains": [],
-    # 关键：禁用外部到内部流量的过滤
-    "filter_external_to_internal": false
-}
-```
+## 快速启动
 
-重启 RITA 服务：
-```bash
-docker restart rita-clickhouse
-```
+### 1. 配置后端
 
-### 2. 配置后端
-
-#### 创建虚拟环境
 ```bash
 cd backend
-python3 -m venv .venv
+python -m venv .venv
+```
+
+Linux/macOS：
+
+```bash
 source .venv/bin/activate
 ```
 
-#### 安装 Python 依赖
+PowerShell：
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+安装依赖：
+
 ```bash
 pip install -r requirements.txt
 ```
 
-#### 配置环境变量
+复制并填写环境变量：
+
 ```bash
-# 复制配置模板
 cp .env.example .env
-
-# 编辑 .env 文件
-vim .env
 ```
 
-填入以下配置：
-```bash
-# SiliconFlow API 配置（或其他 OpenAI 兼容 API）
+至少配置一个报告模型提供方，例如：
+
+```dotenv
 SILICONFLOW_BASE_URL=https://api.siliconflow.cn
-SILICONFLOW_API_KEY=sk-your-api-key-here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_API_KEY=your-openai-api-key
+SILICONFLOW_API_KEY=your-key
 DEFAULT_MODEL_ID=deepseek-v4-flash
-
 ```
 
-#### 构建 RAG 知识库（首次运行）
+可选：配置 `DATABASE_URL` 以启用登录与分析历史；未配置时可使用游客分析模式。
+
+### 2. 构建 ATT&CK RAG 知识库（首次运行）
+
+准备 MITRE ATT&CK STIX 数据与本地 Embedding 模型后运行：
+
 ```bash
-# 下载 MITRE ATT&CK STIX 数据
-git clone https://github.com/mitre-attack/attack-stix-data.git
-
-# 下载 Embedding 模型 
-mkdir -p backend/local_models
-HF_ENDPOINT=https://hf-mirror.com .venv/bin/python - <<'PY'
-from huggingface_hub import snapshot_download
-path = snapshot_download(
-    repo_id='sentence-transformers/all-MiniLM-L6-v2',
-    local_dir='backend/local_models/all-MiniLM-L6-v2',
-    local_dir_use_symlinks=False,
-    resume_download=True,
-)
-print(path)
-PY
-
-# 创建 chroma_db/ 目录，包含向量化的 ATT&CK 知识
 cd backend
-python build_knowledge_base.py
+python build_knowledge_base.py --stix-dir ../attack-stix-data
 ```
 
-#### 启动后端服务
+默认知识库位置为 `backend/chroma_db`，本地 Embedding 模型默认位置为 `backend/local_models/all-MiniLM-L6-v2`。
+
+### 3. 确认 LSTM 工件已部署
+
+`backend/app/models/` 必须包含以下四个文件：
+
+```text
+beacon_lstm_model.keras
+scaler.pkl
+model_metadata.json
+decision_threshold.json
+```
+
+若刚完成训练，请将 `LSTM/models/` 中同一批次的四个文件同步到 `backend/app/models/`。不要混用不同训练批次的模型、Scaler 和元数据。
+
+### 4. 启动服务
+
+启动后端：
+
 ```bash
+cd backend
 uvicorn app.main:app --host 0.0.0.0 --port 8765 --reload
 ```
 
-后端服务监听 `http://127.0.0.1:8765`。
-
-### 3. 启动前端
+启动前端：
 
 ```bash
 cd frontend
-python3 dev_server.py
+python dev_server.py
 ```
 
-然后在浏览器访问 `http://127.0.0.1:5500`。前端会自动使用相同 IP 的 `8765` 端口访问后端，无需配置后端地址。
-该开发服务器会禁用浏览器缓存；保存 CSS、HTML 或 JavaScript 后，直接刷新页面即可看到最新内容，无需手动修改 URL 版本号。
+浏览器访问 `http://127.0.0.1:5500`。前端默认连接同一主机的 `8765` 端口。
 
-### 4. 验证部署
+## 使用方式
 
-1. 打开前端页面 `http://127.0.0.1:5500`
-2. 拖拽上传一个 PCAP 文件
-3. 观察分析进度：Zeek → RITA → LSTM → RAG → AI
-4. 查看生成的威胁报告
+### Web 分析
 
-## 使用说明
+打开前端页面后上传 `.pcap` 或 `.pcapng` 文件，界面会展示：
 
-### 分析 PCAP 文件
+```text
+Zeek → RITA → LSTM → RAG → AI 报告
+```
 
-1. **准备 PCAP 文件**
-   - 支持标准 PCAP 格式（.pcap, .pcapng）
-   - 建议包含至少 10 分钟的网络流量
-   - 对于 LSTM 检测，需要包含 HTTP/TCP 连接
+### API 分析
 
-2. **上传分析**
-   - 在 Web 界面拖拽上传 PCAP 文件
-   - 或使用 API：
-     ```bash
-     curl -X POST http://127.0.0.1:8765/analyze \
-       -F "pcap=@your_traffic.pcap"
-     ```
-
-3. **查看结果**
-   - Web 界面会实时显示分析进度
-   - 最终生成包含以下部分的 Markdown 报告：
-     - 威胁摘要
-     - LSTM 检测到的 beacon 列表（如有）
-     - RAG 溯源的 APT 组织（如有）
-     - 处置建议
-
-### 查看后端日志
-
-后端日志会显示详细的分析过程：
+普通响应接口：
 
 ```bash
-# 启动后端时查看日志
-uvicorn app.main:app --host 0.0.0.0 --port 8765 --reload
-
-# 日志示例：
-# ⏳ RITA: importing logs from /path/to/outputs/xxx ...
-# ✓ RITA: import OK
-# ✓ LSTM: using RITA DB feature export (iat_oresp_*)
-# 📊 LSTM Beacon Detection Results:
-# ...
-# 🔍 RAG: matched! primary=APT28, confidence=85.3%
+curl -X POST http://127.0.0.1:8765/analyze \
+  -F "pcap=@sample.pcap"
 ```
 
-## LSTM 模型训练（可选）
+实时进度接口：
 
-如果需要重新训练 LSTM 模型（使用自己的数据集）：
+```bash
+curl -N -X POST http://127.0.0.1:8765/analyze/stream \
+  -F "pcap=@sample.pcap"
+```
+
+### 离线 LSTM 预测与评估
+
+在项目根目录执行：
+
+```bash
+# 对一个已提取的 24 维特征 CSV 推理
+python LSTM/src/predict.py path/to/lstm_features.csv
+
+# 对已准备的验证集复现当前部署阈值下的窗口级指标
+python LSTM/src/predict.py --split val
+```
+
+离线脚本与后端使用相同的模型工件、阈值文件和“通信组取最高窗口分数”的判定逻辑。
+
+## 重新训练 LSTM
+
+### 1. 准备数据与划分清单
+
+将原始良性和恶意 PCAP 放入：
+
+```text
+LSTM/data/benign/
+LSTM/data/malicious/
+```
+
+在 `LSTM/data/split_manifest.csv` 中为每个文件指定：
+
+```text
+file_name, label, split, source, scenario
+```
+
+`split` 必须为 `train`、`val` 或 `test`。同一 PCAP 不能跨集合，以避免训练集与测试集泄漏。
+
+### 2. 生成特征数据
 
 ```bash
 cd LSTM
-
-# 1. 准备数据：将良性和恶意流量的 CSV 放入对应目录
-#    - LSTM/data/benign/*.csv
-#    - LSTM/data/malicious/*.csv
-
-# 2. 训练模型
-python src/train.py
-
-# 3. 复制训练产物到后端
-cp models/* ../backend/app/models/
+python src/prepare_pcap_dataset.py
 ```
 
-详见 `LSTM/README.md`
+该脚本不会改写原始 PCAP，会在 `feature_data/` 生成对应 CSV，并在 `logs/pcap_feature_coverage.csv` 记录可形成时序窗口的通信组覆盖情况。
 
-## 技术栈
+### 3. 训练与评估
 
-### 后端
-- **FastAPI**: Web 框架
-- **Zeek**: 网络流量解析
-- **RITA v5**: Beacon 检测（基于 ClickHouse）
-- **TensorFlow/Keras**: LSTM 深度学习模型
-- **ChromaDB**: 向量数据库（RAG 知识库）
-- **Sentence-Transformers**: 文本嵌入模型
-- **Requests**: HTTP 客户端（调用 LLM API）
+```bash
+cd LSTM
+python src/train.py
+```
 
-### 前端
-- **原生 HTML/CSS/JavaScript**: 无框架依赖
-- **Marked.js**: Markdown 渲染
-- **highlight.js**: 代码高亮
+训练会生成：
 
-### AI 模型
-- **LSTM**: 自训练 beacon 检测模型（ARES 数据集）
-- **LLM**: SiliconFlow API（Qwen/DeepSeek/…）
-- **Embedding**: all-MiniLM-L6-v2 (Sentence-Transformers)
+```text
+models/beacon_lstm_model.keras
+models/scaler.pkl
+models/model_metadata.json
+models/decision_threshold.json
+logs/evaluation.json
+logs/repeated_training_report.json
+logs/training_history.json
+logs/test_false_negative_windows.csv
+```
+
+训练完成后，验证模型工件后再整体同步到 `backend/app/models/`。
+
+## 质量检查
+
+```bash
+python -m unittest backend/test_pcap_lstm_feature_extractor.py
+python -m unittest backend/test_lstm_reporting.py
+python LSTM/src/predict.py --split val
+```
 
 ## 常见问题
 
-### Q1: RITA 无法分析内网流量？
-**A**: 修改 `/etc/rita/config.hjson`，将内网地址段添加到 `always_included_subnets`，并设置 `filter_external_to_internal: false`。详见部署指南。
+### LSTM 未完成或没有结果
 
-### Q2: LSTM 显示 "empty RITA DB feature export"？
-**A**: 这表示 RITA 的 ClickHouse 数据库中没有时间间隔数据。可能原因：
-- PCAP 文件只包含 DNS 流量（LSTM 需要 HTTP/TCP 连接）
-- PCAP 文件流量太少
-- 确保使用包含周期性 HTTP 请求的 PCAP 测试
+可能原因包括：
 
-### Q3: RAG 无法提取威胁特征？
-**A**: 检查阈值配置。当前阈值（`backend/app/data_extractor.py`）：
-- Beacon Score ≥ 70
-- C2 DNS Score ≥ 0.5
-- 如果仍然过滤过严，可以降低 `MIN_BEACON_SCORE` 等阈值
+- 模型工件不完整，或模型、Scaler、元数据不是同一批次；
+- PCAP 不包含 TCP 流量；
+- 每个通信组少于 10 次连接，无法形成 LSTM 输入窗口；
+- Scapy、Keras/TensorFlow 等依赖未安装。
 
-### Q4: 前端无法连接后端？
-**A**: 前端会自动使用当前访问 IP 的 `8765` 端口连接后端。如果仍有问题：
-- 确认后端在 `http://127.0.0.1:8765` 运行
-- 确认前端通过 `http://127.0.0.1:5500` 提供，而非直接双击 `frontend/index.html`
+这类情况会在报告中显示“LSTM 检测未完成”，不等同于良性结论。
 
-### Q5: ChromaDB 报错？
-**A**: 首次运行需要构建知识库：
-```bash
-cd backend
-python build_knowledge_base.py
-```
+### LSTM 未命中
 
-## 性能优化建议
+表示已完成时序检测，但没有窗口达到当前 `0.99` 告警阈值。它不表示流量绝对安全；应结合 RITA、Zeek 日志、资产背景和其他检测证据判断。
 
-1. **大 PCAP 文件**: Zeek 和 RITA 处理大文件（>1GB）可能耗时较长，建议：
-   - 使用 `timeout` 参数限制最大等待时间
-   - 分割 PCAP 文件分批分析
+### RITA 不可用
 
-2. **LSTM 推理**: 默认使用 CPU，如需加速：
-   - 安装 TensorFlow GPU 版本
-   - 修改 `lstm_predictor.py` 使用 GPU
+后端会回退到 Zeek 日志作为报告基础；LSTM 仍可从原始 PCAP 独立执行。请检查 RITA 命令、ClickHouse 服务及 RITA 的内部网段过滤配置。
 
-3. **RAG 检索**: ChromaDB 默认使用内存，大规模知识库可配置持久化
+### RAG 初始化失败
 
-## 贡献指南
+请确认 `backend/chroma_db` 已构建，`backend/local_models/all-MiniLM-L6-v2` 可用，并已安装 `chromadb` 与 `sentence-transformers`。
 
-欢迎贡献代码、报告问题或提出建议！
+## 技术栈
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
+- FastAPI、SQLAlchemy、原生 HTML/CSS/JavaScript
+- Zeek、RITA、ClickHouse
+- TensorFlow/Keras、scikit-learn、Scapy
+- ChromaDB、Sentence-Transformers、MITRE ATT&CK STIX
+- OpenAI 兼容接口 / SiliconFlow 等大模型服务
 
-## 许可证
+## 许可证与致谢
 
-本项目采用 MIT 许可证。详见 `LICENSE` 文件。
-
-## 致谢
-
-- [Zeek](https://zeek.org/) - 强大的网络流量分析框架
-- [RITA](https://github.com/activecm/rita) - 开源威胁狩猎工具
-- [MITRE ATT&CK](https://attack.mitre.org/) - 威胁情报知识库
-- [ARES Dataset](https://github.com/ARES-Dataset) - LSTM 模型训练数据集
-- [SiliconFlow](https://siliconflow.cn/) - 高性能 LLM API 服务
-
-## 联系方式
-
-如有问题或建议，请提交 GitHub Issue
-
----
-
-**C2Sherlock** - 让隐蔽的 C2 通信无处遁形 🔍
+项目采用 MIT 许可证。感谢 Zeek、RITA、MITRE ATT&CK、TensorFlow/Keras、ChromaDB、Sentence-Transformers 与 ARES Dataset 等开源项目和数据资源。

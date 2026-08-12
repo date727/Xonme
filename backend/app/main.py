@@ -476,6 +476,55 @@ def run_zeek(pcap_path: str, output_dir: Path, *, job: AnalysisJob | None = None
     run_command(["zeek", "readpcap", pcap_path, str(output_dir)], job=job)
 
 
+def _build_sample_rag_context(
+    rag_engine: "ThreatAttributionEngine",
+    merged_features: list[dict],
+    *,
+    job: AnalysisJob | None = None,
+) -> tuple[str, list[dict]]:
+    """Run attribution for every suspicious connection without changing dashboard shape."""
+
+    results: list[dict] = []
+    sections = ["## 全量可疑连接与 RAG 检索证据"]
+    for index, feature in enumerate(merged_features, 1):
+        _raise_if_cancelled(job)
+        endpoint = (
+            f"{feature.get('src_ip') or '-'} → "
+            f"{feature.get('dst_ip') or '-'}:{feature.get('dst_port') or '-'}"
+        )
+        sources = feature.get("detection_sources") or []
+        if isinstance(sources, str):
+            sources = [item for item in sources.split(";") if item]
+        try:
+            result = rag_engine.attribute_single_threat(feature)
+            results.append(result)
+            report = rag_engine.generate_attribution_report(result)
+            sections.append(
+                f"\n### 可疑连接 {index}\n"
+                f"- **连接**：{endpoint}\n"
+                f"- **检测来源**：{' + '.join(sources) if sources else '未知'}\n\n"
+                f"{report}"
+            )
+        except AnalysisCancelled:
+            raise
+        except Exception as exc:
+            print(f"RAG: retrieval failed for threat {index}/{len(merged_features)} - {exc}")
+            sections.append(
+                f"\n### 可疑连接 {index}\n"
+                f"- **连接**：{endpoint}\n"
+                "- **RAG 状态**：该连接检索失败，检测证据仍予保留。"
+            )
+    return "\n".join(sections), results
+
+
+def _rag_evidence_appendix(rag_context: str | None) -> str:
+    return f"\n\n---\n\n{rag_context}" if rag_context else ""
+
+
+def _lstm_evidence_appendix(lstm_results: dict | None) -> str:
+    return f"\n\n---\n\n{_fmt_lstm(lstm_results)}"
+
+
 def _build_ai_request(
     csv_text: str,
     lstm_results: dict | None = None,
@@ -516,16 +565,12 @@ def _build_ai_request(
             "- 你的置信度与需要保留的 caveat\n"
         )
 
-    if lstm_results and lstm_results.get("total_flagged", 0) > 0:
-        lstm_markdown = _fmt_lstm(lstm_results)
-        prompt += f"\nLSTM 检测结果如下：\n{lstm_markdown}\n"
-        print("=" * 80)
-        print("LSTM Beacon Detection Results (inserted into LLM prompt):")
-        print("=" * 80)
-        print(lstm_markdown)
-        print("=" * 80)
-    elif lstm_results and lstm_results.get("total_flagged", 0) == 0:
-        print("LSTM: analyzed but found no beacons")
+    lstm_markdown = _fmt_lstm(lstm_results)
+    prompt += (
+        "\n以下是系统生成的 LSTM 时序检测结果。无论是否命中 C2，"
+        "请在报告中明确说明该检测结论；未命中不代表绝对安全：\n"
+        f"{lstm_markdown}\n"
+    )
 
     prompt += f"\n原始分析输入如下：\n{csv_text}"
 
@@ -570,7 +615,8 @@ def generate_ai_analysis(
 
     data = response.json()
     try:
-        return data["choices"][0]["message"]["content"].strip()
+        report = data["choices"][0]["message"]["content"].strip()
+        return report + _lstm_evidence_appendix(lstm_results) + _rag_evidence_appendix(rag_context)
     except (KeyError, IndexError, AttributeError) as exc:
         raise HTTPException(
             status_code=502, detail="Unexpected SiliconFlow response format"
@@ -942,21 +988,21 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     if rita_ok:
         csv_path.write_text(csv_text, encoding="utf-8")
 
-    # The current model is trained for HTTP/HTTPS, so DNS and other traffic
-    # stays in the RITA/RAG path instead of being sent to the LSTM.
+    # The new 24-dimensional model consumes reconstructed TCP connections.
+    # DNS/UDP traffic remains on the RITA/RAG path.
     lstm_results = None
     if _LSTM_AVAILABLE:
         try:
             from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
 
-            print("LSTM: extracting HTTP/HTTPS timing features from PCAP packet timestamps")
+            print("LSTM: extracting all-TCP connection features from PCAP packet timestamps")
             lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
             if lstm_csv_text:
                 print("LSTM: feature extraction complete, running beacon detection...")
                 lstm_results = predict_beacons(lstm_csv_text)
             else:
-                print("LSTM: skipped (no HTTP/HTTPS packets found in PCAP)")
+                print("LSTM: skipped (no usable TCP connection sequence found in PCAP)")
         except Exception as exc:
             print(f"LSTM: analysis failed - {exc}")
             import traceback
@@ -987,19 +1033,9 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
                 if not merged_features:
                     print("RAG: no threats found after merging, skipping attribution")
                 else:
-                    print("RAG: merged features ready, searching knowledge base...")
+                    print("RAG: searching the knowledge base for every merged threat...")
                     rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
-                    rag_result = rag_engine.attribute_single_threat(merged_features[0])
-
-                    if rag_result["candidates"]:
-                        primary = rag_result["primary_candidate"]
-                        print(
-                            f"RAG: matched! primary={primary['name']}, "
-                            f"confidence={rag_result['confidence']:.1f}%"
-                        )
-                        rag_context = rag_engine.generate_attribution_report(rag_result)
-                    else:
-                        print("RAG: no matching APT group found in knowledge base")
+                    rag_context, _ = _build_sample_rag_context(rag_engine, merged_features)
             else:
                 print("RAG: no threats detected by RITA or LSTM, skipping attribution")
         except Exception as exc:
@@ -1148,7 +1184,7 @@ async def analyze_pcap_stream(
                 try:
                     from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
 
-                    print("LSTM: extracting HTTP/HTTPS timing features from PCAP packet timestamps")
+                    print("LSTM: extracting all-TCP connection features from PCAP packet timestamps")
                     lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
                     if lstm_csv_text:
@@ -1159,7 +1195,7 @@ async def analyze_pcap_stream(
                         lstm_results = predict_beacons(lstm_csv_text)
                         _raise_if_cancelled(job)
                     else:
-                        print("LSTM: skipped (no HTTP/HTTPS packets found in PCAP)")
+                        print("LSTM: skipped (no usable TCP connection sequence found in PCAP)")
                 except AnalysisCancelled:
                     raise
                 except Exception as exc:
@@ -1172,7 +1208,7 @@ async def analyze_pcap_stream(
                 lstm_results
                 or {
                     "status": "skipped_or_failed",
-                    "reason": "No HTTP/HTTPS packets, unavailable dependency, or prediction failure",
+                    "reason": "No usable TCP sequence, unavailable dependency, or prediction failure",
                 },
             )
             _append_runtime_log(
@@ -1229,23 +1265,11 @@ async def analyze_pcap_stream(
                                 f"RAG: searching for matching APT groups (top-{rag_engine.top_k})..."
                             )
 
-                            rag_result = rag_engine.attribute_single_threat(
-                                merged_features[0]
+                            rag_context, rag_results = _build_sample_rag_context(
+                                rag_engine, merged_features, job=job
                             )
                             _raise_if_cancelled(job)
-
-                            if rag_result["candidates"]:
-                                primary = rag_result["primary_candidate"]
-                                print(
-                                    f"RAG: matched! primary={primary['name']}, "
-                                    f"confidence={rag_result['confidence']:.1f}%, "
-                                    f"candidates={len(rag_result['candidates'])}"
-                                )
-                                rag_context = rag_engine.generate_attribution_report(
-                                    rag_result
-                                )
-                            else:
-                                print("RAG: no matching APT group found in knowledge base")
+                            rag_result = rag_results[0] if rag_results else None
                     else:
                         print("RAG: no threats detected by RITA or LSTM, skipping attribution")
                 except AnalysisCancelled:
@@ -1285,6 +1309,8 @@ async def analyze_pcap_stream(
                 )
 
             analysis_markdown = "".join(chunks)
+            analysis_markdown += _lstm_evidence_appendix(lstm_results)
+            analysis_markdown += _rag_evidence_appendix(rag_context)
             report_path = artifacts.report_dir / "analysis.md"
             report_path.write_text(analysis_markdown, encoding="utf-8")
             dashboard = {

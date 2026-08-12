@@ -111,6 +111,18 @@ def encode_for_rag_query(feature: dict) -> str:
         RAG 查询文本
     """
     query_parts = []
+    sources = {str(source).upper() for source in feature.get("detection_sources", [])}
+    lstm_confidence = float(feature.get("lstm_confidence", 0) or 0)
+    beacon_score = float(feature.get("beacon_score", 0) or 0)
+
+    # Preserve detector provenance: a high-confidence LSTM beacon is meaningful
+    # RAG evidence even when RITA did not flag the exact same connection tuple.
+    if "RITA" in sources or beacon_score >= 70:
+        query_parts.append("statistically detected periodic command and control beacon")
+    if "LSTM" in sources and lstm_confidence >= 90:
+        query_parts.append("high confidence machine learning detected C2 beacon")
+    if "RITA" in sources and "LSTM" in sources:
+        query_parts.append("independent RITA and LSTM agreement on C2 behavior")
 
     # C2-focused behavioral signals from Zeek/UWF aggregation.
     if feature.get("c2_score", 0) >= 50:
@@ -123,7 +135,9 @@ def encode_for_rag_query(feature: dict) -> str:
     avg_interval = feature.get("avg_interval", 0) or 0
     total_bytes = feature.get("total_bytes", 0) or 0
 
-    if service == "dns" or str(feature.get("dst_port", "")) == "53":
+    if (service == "dns" or str(feature.get("dst_port", "")) == "53") and (
+        feature.get("c2_over_dns_value", 0) >= 500 or "RITA" in sources
+    ):
         query_parts.append("DNS based command and control")
         query_parts.append("dynamic DNS resolution or DNS calculation")
 
@@ -143,7 +157,7 @@ def encode_for_rag_query(feature: dict) -> str:
         query_parts.append(f"connection state {conn_state}")
     
     # 检测类型（使用 RITA 官方 "medium" 阈值）
-    if feature.get("beacon_score", 0) >= 90:  # medium threshold
+    if beacon_score >= 70:
         query_parts.append("周期性 Beacon 通信")
     
     if feature.get("c2_over_dns_value", 0) >= 800:  # medium threshold  
@@ -171,6 +185,12 @@ def encode_for_rag_query(feature: dict) -> str:
     if feature.get("http_user_agents"):
         query_parts.append("HTTP 协议通信")
     
+    port = str(feature.get("dst_port", ""))
+    if port == "80":
+        query_parts.append("HTTP web protocols for command and control")
+    elif port == "443":
+        query_parts.append("HTTPS encrypted web protocols for command and control")
+
     if not query_parts:
         query_parts.append("可疑网络通信")
     

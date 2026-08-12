@@ -1,0 +1,15 @@
+{
+  "threshold": 0.99,
+  "selected_on": "validation_window_manual_operational_adjustment",
+  "target_recall": 0.98,
+  "maximum_fpr": 0.05,
+  "c2_class_weight_multiplier": 1.0,
+  "target_recall_met": true,
+  "target_fpr_met": true,
+  "selection_mode": "constraints_met",
+  "validation_recall": 1.0,
+  "validation_fpr": 0.0,
+  "selected_seed": 2029,
+  "previous_threshold": 0.9998542070388794,
+  "selection_reason": "manual_operational_adjustment: threshold 0.99 retains validation recall=1.0 and FPR=0.0"
+}

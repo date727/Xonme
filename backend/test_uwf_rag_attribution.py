@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -23,9 +24,12 @@ from typing import Any
 
 BACKEND_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_ROOT.parent
-DEFAULT_DATA_DIR = PROJECT_ROOT / "UWF-ZeekData22"
+DEFAULT_DATA_DIR = PROJECT_ROOT / "RAG_data" / "UWF-ZeekData22"
 DEFAULT_KB_PATH = BACKEND_ROOT / "chroma_db"
 DEFAULT_OUTPUT_DIR = BACKEND_ROOT / "outputs"
+DEFAULT_WINDOW_SECONDS = 3600
+INFRASTRUCTURE_PORTS = {"67", "68", "123", "137", "138", "139", "445", "5353", "5355", "546", "547", "1900"}
+C2_LIKELY_WEB_PORTS = {"80", "443", "8080", "8443"}
 C2_TECHNIQUE_PREFIXES = (
     "T1071",
     "T1095",
@@ -48,7 +52,8 @@ class Aggregate:
     dst_port: str
     protocol: str
     service: str
-    label: str
+    window_start: int
+    labels: Counter[str] = field(default_factory=Counter)
     connection_count: int = 0
     total_duration: float = 0.0
     total_bytes: int = 0
@@ -81,6 +86,7 @@ class Aggregate:
         if history:
             self.histories[history] += 1
         self.files.add(file_name)
+        self.labels[normalize_label(row.get("mitre_attack_tactics"))] += 1
 
         if ts > 0:
             self.first_ts = ts if self.first_ts is None else min(self.first_ts, ts)
@@ -105,6 +111,11 @@ class Aggregate:
     @property
     def dominant_history(self) -> str:
         return self.histories.most_common(1)[0][0] if self.histories else ""
+
+    @property
+    def label(self) -> str:
+        """Dataset annotation for reporting only; never used as a model feature."""
+        return self.labels.most_common(1)[0][0] if self.labels else "none"
 
 
 def safe_float(value: Any) -> float:
@@ -139,12 +150,17 @@ def score_c2_likelihood(agg: Aggregate) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
     is_dns = agg.service == "dns" or agg.dst_port == "53"
-    is_labeled = agg.label.lower() != "none"
     avg_bytes = agg.total_bytes / agg.connection_count if agg.connection_count else 0.0
 
-    if is_labeled:
-        score += 20.0
-        reasons.append(f"uwf_label={agg.label}")
+    # This UWF export has conn.log fields only.  It lacks queried domain names,
+    # entropy and NXDOMAIN information, so DNS tunnelling cannot be established
+    # from this dataset.  Do not manufacture C2 evidence from ordinary DNS.
+    if is_dns:
+        return 0.0, ["excluded_dns_without_query_evidence"]
+    if agg.protocol == "icmp":
+        return 0.0, ["excluded_icmp_without_payload_evidence"]
+    if agg.dst_port in INFRASTRUCTURE_PORTS:
+        return 0.0, [f"excluded_infrastructure_port={agg.dst_port}"]
 
     if agg.connection_count >= 1000:
         score += 30.0
@@ -159,34 +175,23 @@ def score_c2_likelihood(agg: Aggregate) -> tuple[float, list[str]]:
         score += 8.0
         reasons.append("repeated_connection")
 
-    if agg.active_window >= 28800:
-        score += 18.0
-        reasons.append("long_active_window")
-    elif agg.active_window >= 3600:
+    # Aggregates are deliberately bounded to one hour.  A connection must show
+    # repeated behavior *within* that interval, rather than merely recur over
+    # the whole multi-day collection period.
+    if agg.active_window >= 1800:
         score += 10.0
-        reasons.append("multi_hour_active_window")
+        reasons.append("sustained_activity_within_window")
 
-    if agg.avg_interval and 1.0 <= agg.avg_interval <= 3600.0 and agg.connection_count >= 10:
+    if agg.avg_interval and 5.0 <= agg.avg_interval <= 900.0 and agg.connection_count >= 10:
         score += 18.0
         reasons.append("periodic_interval")
 
-    if is_dns and is_labeled:
-        score += 16.0
-        reasons.append("labeled_dns_channel")
-    elif is_dns and agg.connection_count >= 100:
+    if agg.protocol == "tcp" and agg.dst_port in C2_LIKELY_WEB_PORTS:
         score += 10.0
-        reasons.append("high_volume_dns")
-    elif is_dns:
+        reasons.append("web_c2_capable_channel")
+    elif agg.protocol == "tcp" and agg.dst_port not in {"", "unknown"}:
         score += 4.0
-        reasons.append("dns_channel")
-
-    if agg.dst_port not in {"", "unknown", "53", "67", "80", "123", "137", "138", "443", "547"}:
-        score += 12.0
-        reasons.append(f"non_standard_port={agg.dst_port}")
-
-    if agg.dominant_conn_state in {"S0", "REJ", "RSTO", "RSTR"} and is_labeled:
-        score += 8.0
-        reasons.append(f"scan_like_state={agg.dominant_conn_state}")
+        reasons.append(f"non_web_tcp_channel={agg.dst_port}")
 
     if agg.connection_count >= 20 and avg_bytes <= 800:
         score += 8.0
@@ -201,14 +206,19 @@ def aggregate_uwf_csvs(
     max_rows_per_file: int,
     max_files: int,
     row_stride: int,
-) -> tuple[dict[tuple[str, str, str, str, str, str], Aggregate], dict[str, Any]]:
+    window_seconds: int,
+) -> tuple[dict[tuple[str, str, str, str, str, int], Aggregate], dict[str, Any]]:
     files = sorted(data_dir.glob("*.csv"))
     if max_files > 0:
         files = files[:max_files]
     if not files:
         raise FileNotFoundError(f"No CSV files found in {data_dir}")
 
-    aggregates: dict[tuple[str, str, str, str, str, str], Aggregate] = {}
+    # Labels are deliberately excluded from this key: annotation may be used
+    # only for post-hoc reporting, never to influence C2 scoring or retrieval.
+    # The time window prevents ordinary service traffic accumulated over days
+    # from being mistaken for a periodic beacon.
+    aggregates: dict[tuple[str, str, str, str, str, int], Aggregate] = {}
     scanned_rows = 0
     rows_by_label: Counter[str] = Counter()
     rows_by_file: Counter[str] = Counter()
@@ -229,11 +239,13 @@ def aggregate_uwf_csvs(
                 protocol = (row.get("protocol") or "").strip().lower()
                 service = (row.get("service") or "").strip().lower()
                 label = normalize_label(row.get("mitre_attack_tactics"))
+                ts = safe_float(row.get("ts"))
 
                 if not src_ip or not dst_ip:
                     continue
 
-                key = (src_ip, dst_ip, dst_port, protocol, service, label)
+                window_start = int(ts // window_seconds) * window_seconds if ts else 0
+                key = (src_ip, dst_ip, dst_port, protocol, service, window_start)
                 if key not in aggregates:
                     aggregates[key] = Aggregate(
                         src_ip=src_ip,
@@ -241,7 +253,7 @@ def aggregate_uwf_csvs(
                         dst_port=dst_port or "unknown",
                         protocol=protocol,
                         service=service,
-                        label=label,
+                        window_start=window_start,
                     )
                 aggregates[key].update(row, csv_path.name)
 
@@ -261,7 +273,6 @@ def aggregate_uwf_csvs(
 
 def aggregate_to_feature(agg: Aggregate) -> dict[str, Any]:
     is_dns = agg.service == "dns" or agg.dst_port == "53"
-    is_labeled = agg.label.lower() != "none"
     c2_score, c2_reasons = score_c2_likelihood(agg)
 
     beacon_score = 0.0
@@ -274,21 +285,16 @@ def aggregate_to_feature(agg: Aggregate) -> dict[str, Any]:
     elif agg.connection_count >= 5:
         beacon_score = 55.0
 
-    if is_labeled and c2_score >= 50:
-        beacon_score = max(beacon_score, 70.0)
-
     if agg.avg_interval and 1.0 <= agg.avg_interval <= 3600.0 and agg.connection_count >= 10:
         beacon_score = min(100.0, beacon_score + 10.0)
 
     c2_over_dns_value = float(agg.connection_count) if is_dns and c2_score >= 50 else 0.0
     long_conn_value = max(agg.total_duration, agg.active_window if agg.connection_count >= 5 else 0.0)
 
-    if is_labeled and (beacon_score >= 90 or c2_over_dns_value >= 800 or long_conn_value >= 28800):
+    if beacon_score >= 90 or c2_over_dns_value >= 800 or long_conn_value >= 28800:
         threat_category = "high"
-    elif is_labeled or beacon_score >= 70 or c2_over_dns_value >= 500:
+    elif beacon_score >= 70 or c2_over_dns_value >= 500:
         threat_category = "medium"
-    elif agg.label.lower() == "none":
-        threat_category = "none"
     else:
         threat_category = "low"
 
@@ -314,12 +320,21 @@ def aggregate_to_feature(agg: Aggregate) -> dict[str, Any]:
     }
 
 
+def stable_sample_key(agg: Aggregate, seed: int) -> str:
+    value = "|".join((
+        str(seed), agg.src_ip, agg.dst_ip, agg.dst_port, agg.protocol,
+        agg.service, str(agg.window_start),
+    ))
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def select_samples(
-    aggregates: dict[tuple[str, str, str, str, str, str], Aggregate],
+    aggregates: dict[tuple[str, str, str, str, str, int], Aggregate],
     *,
     sample_per_label: int,
     max_samples: int,
     include_none: bool,
+    seed: int,
 ) -> list[Aggregate]:
     by_label: dict[str, list[Aggregate]] = defaultdict(list)
     for agg in aggregates.values():
@@ -329,11 +344,10 @@ def select_samples(
 
     selected: list[Aggregate] = []
     for label in sorted(by_label):
-        items = sorted(
-            by_label[label],
-            key=lambda a: (a.connection_count, a.active_window, a.total_bytes),
-            reverse=True,
-        )
+        # Post-hoc label stratification gives each category representation but
+        # selection itself is a deterministic hash sample, not "largest flow"
+        # sampling that would favor high-volume infrastructure services.
+        items = sorted(by_label[label], key=lambda a: stable_sample_key(a, seed))
         selected.extend(items[:sample_per_label])
 
     selected.sort(
@@ -362,7 +376,24 @@ def has_c2_technique(techniques: list[str]) -> bool:
     )
 
 
-def run_rag(samples: list[Aggregate], kb_path: Path, top_k: int) -> list[dict[str, Any]]:
+def decide_attribution(
+    candidates: list[dict], *, min_top1_score: float, min_score_gap: float
+) -> tuple[bool, str]:
+    if not candidates:
+        return False, "no_candidate"
+    top1 = float(candidates[0].get("score") or 0.0)
+    top2 = float(candidates[1].get("score") or 0.0) if len(candidates) > 1 else 0.0
+    if top1 < min_top1_score:
+        return False, "insufficient_top1_similarity"
+    if len(candidates) > 1 and top1 - top2 < min_score_gap:
+        return False, "ambiguous_top1_top2_gap"
+    return True, "accepted"
+
+
+def run_rag(
+    samples: list[Aggregate], kb_path: Path, top_k: int,
+    min_top1_score: float, min_score_gap: float,
+) -> list[dict[str, Any]]:
     from app.rag_engine import ThreatAttributionEngine
 
     engine = ThreatAttributionEngine(kb_path=kb_path, top_k=top_k)
@@ -380,6 +411,11 @@ def run_rag(samples: list[Aggregate], kb_path: Path, top_k: int) -> list[dict[st
         primary = attribution.get("primary_candidate") or {}
         top1_score = float(candidates[0]["score"]) if candidates else 0.0
         top2_score = float(candidates[1]["score"]) if len(candidates) > 1 else 0.0
+        accepted, decision = decide_attribution(
+            candidates,
+            min_top1_score=min_top1_score,
+            min_score_gap=min_score_gap,
+        )
 
         results.append(
             {
@@ -391,6 +427,7 @@ def run_rag(samples: list[Aggregate], kb_path: Path, top_k: int) -> list[dict[st
                 "service": agg.service,
                 "conn_state": agg.dominant_conn_state,
                 "history": agg.dominant_history,
+                "window_start": agg.window_start,
                 "connection_count": agg.connection_count,
                 "active_window": agg.active_window,
                 "total_duration": agg.total_duration,
@@ -398,7 +435,10 @@ def run_rag(samples: list[Aggregate], kb_path: Path, top_k: int) -> list[dict[st
                 "c2_score": feature["c2_score"],
                 "c2_reasons": feature["c2_reasons"],
                 "query": attribution.get("query", ""),
-                "primary_candidate": primary.get("name", ""),
+                "retrieved_top1": primary.get("name", ""),
+                "primary_candidate": primary.get("name", "") if accepted else "",
+                "attribution_accepted": accepted,
+                "attribution_decision": decision,
                 "confidence": float(attribution.get("confidence") or 0.0),
                 "top1_score": top1_score,
                 "top2_score": top2_score,
@@ -430,6 +470,8 @@ def summarize(
     *,
     confidence_threshold: float,
     c2_threshold: float,
+    min_top1_score: float,
+    min_score_gap: float,
     include_low_c2: bool,
     no_rag: bool,
 ) -> dict[str, Any]:
@@ -441,6 +483,8 @@ def summarize(
         "sampled_count": len(selected_samples),
         "sampled_by_label": dict(groups_by_label),
         "c2_threshold": c2_threshold,
+        "min_top1_score": min_top1_score,
+        "min_score_gap": min_score_gap,
         "include_low_c2": include_low_c2,
         "c2_candidate_count": len(rag_samples),
         "c2_filtered_count": len(selected_samples) - len(rag_samples),
@@ -457,12 +501,15 @@ def summarize(
 
     label_metrics: dict[str, Any] = {}
     for label, items in sorted(by_label.items()):
-        with_candidates = [i for i in items if i["primary_candidate"]]
+        retrieved = [i for i in items if i["retrieved_top1"]]
+        accepted = [i for i in items if i["attribution_accepted"]]
         high_conf = [i for i in items if i["confidence"] >= confidence_threshold]
         label_metrics[label] = {
             "samples": len(items),
-            "with_candidates": len(with_candidates),
-            "coverage": len(with_candidates) / len(items) if items else 0.0,
+            "retrieved_candidate_count": len(retrieved),
+            "retrieval_coverage": len(retrieved) / len(items) if items else 0.0,
+            "accepted_attribution_count": len(accepted),
+            "accepted_attribution_rate": len(accepted) / len(items) if items else 0.0,
             "c2_technique_hit_count": sum(1 for i in items if i["c2_technique_hit"]),
             "c2_technique_hit_rate": (
                 sum(1 for i in items if i["c2_technique_hit"]) / len(items)
@@ -478,6 +525,7 @@ def summarize(
     candidate_frequency = Counter(
         item["primary_candidate"] for item in results if item["primary_candidate"]
     )
+    decision_frequency = Counter(item["attribution_decision"] for item in results)
     technique_frequency: Counter[str] = Counter()
     for item in results:
         technique_frequency.update(item.get("matched_techniques") or [])
@@ -497,6 +545,7 @@ def summarize(
             "c2_technique_hit_count": c2_hit_count,
             "c2_technique_hit_rate": c2_hit_count / len(results) if results else 0.0,
             "candidate_frequency": dict(candidate_frequency.most_common(20)),
+            "attribution_decision_frequency": dict(decision_frequency),
             "technique_frequency": dict(technique_frequency.most_common(30)),
         }
     )
@@ -531,7 +580,11 @@ def write_outputs(
         "total_bytes",
         "c2_score",
         "c2_reasons",
+        "window_start",
+        "retrieved_top1",
         "primary_candidate",
+        "attribution_accepted",
+        "attribution_decision",
         "confidence",
         "top1_score",
         "top2_score",
@@ -579,8 +632,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--c2-threshold",
         type=float,
-        default=50.0,
+        default=40.0,
         help="Only aggregates with c2_score >= this value enter RAG.",
+    )
+    parser.add_argument(
+        "--window-seconds", type=int, default=DEFAULT_WINDOW_SECONDS,
+        help="Aggregation window; default is 3600 seconds.",
+    )
+    parser.add_argument(
+        "--sample-seed", type=int, default=20260811,
+        help="Seed for deterministic, per-label reporting samples.",
+    )
+    parser.add_argument(
+        "--min-top1-score", type=float, default=0.60,
+        help="Minimum Top-1 similarity required for an organization-level attribution.",
+    )
+    parser.add_argument(
+        "--min-score-gap", type=float, default=0.03,
+        help="Minimum Top-1 minus Top-2 gap required for an organization-level attribution.",
     )
     parser.add_argument(
         "--include-low-c2",
@@ -610,12 +679,14 @@ def main() -> int:
         max_rows_per_file=args.max_rows_per_file,
         max_files=args.max_files,
         row_stride=max(1, args.row_stride),
+        window_seconds=max(1, args.window_seconds),
     )
     samples = select_samples(
         aggregates,
         sample_per_label=args.sample_per_label,
         max_samples=args.max_samples,
         include_none=not args.exclude_none,
+        seed=args.sample_seed,
     )
     rag_samples = filter_c2_samples(
         samples,
@@ -630,7 +701,11 @@ def main() -> int:
 
     results: list[dict[str, Any]] = []
     if not args.no_rag:
-        results = run_rag(rag_samples, kb_path=kb_path, top_k=args.top_k)
+        results = run_rag(
+            rag_samples, kb_path=kb_path, top_k=args.top_k,
+            min_top1_score=args.min_top1_score,
+            min_score_gap=args.min_score_gap,
+        )
 
     summary = summarize(
         parse_stats,
@@ -639,6 +714,8 @@ def main() -> int:
         results,
         confidence_threshold=args.confidence_threshold,
         c2_threshold=args.c2_threshold,
+        min_top1_score=args.min_top1_score,
+        min_score_gap=args.min_score_gap,
         include_low_c2=args.include_low_c2,
         no_rag=args.no_rag,
     )

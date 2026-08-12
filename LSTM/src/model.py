@@ -28,9 +28,9 @@ def build_lstm_model(input_shape, lstm_units=LSTM_UNITS,
         编译好的 Keras Sequential 模型
     """
     model = models.Sequential([
+        layers.Input(shape=input_shape),
         layers.LSTM(
             lstm_units, return_sequences=True,
-            input_shape=input_shape,
             kernel_regularizer=regularizers.l2(1e-4),
             recurrent_regularizer=regularizers.l2(1e-4),
         ),
