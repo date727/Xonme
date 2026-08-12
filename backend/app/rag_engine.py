@@ -53,7 +53,7 @@ class ThreatAttributionEngine:
                 f"当前路径: {resolved_kb_path}"
             )
         
-        print(f"✓ 威胁归因引擎初始化完成")
+        print("RAG: attribution engine initialized")
         print(f"  - 知识库: {stats['document_count']} 个 APT 组织")
         print(f"  - 检索 Top-{top_k} 候选")
     

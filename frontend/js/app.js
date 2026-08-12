@@ -533,8 +533,7 @@ const downloadGeneratedReport = async (format, baseName) => {
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `报告导出失败（${response.status}）`);
+    throw new Error(await getApiError(response));
   }
 
   const blob = await response.blob();

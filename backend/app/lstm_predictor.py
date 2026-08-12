@@ -20,6 +20,7 @@ _load_attempted = False
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 DEFAULT_GROUP_COLS = ["source_file", "src_ip", "dst_ip", "dst_port", "ip_protocol"]
 DEFAULT_SORT_COL = "start_time"
+INFERENCE_BATCH_SIZE = 512
 
 logger = logging.getLogger(__name__)
 
@@ -126,39 +127,49 @@ def _row_to_feature_vector(row: dict, feature_cols: list[str]) -> np.ndarray:
     return np.asarray(values, dtype=np.float32)
 
 
-def _build_sequences(
+def _prepare_groups(
     rows: list[dict],
-    feature_cols: list[str],
     seq_len: int,
     group_cols: list[str],
     sort_col: str,
-) -> tuple[np.ndarray, list[dict]]:
+) -> list[tuple[tuple, list[dict]]]:
+    """Group and order rows, excluding groups too short for one window."""
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for row in rows:
         key = tuple(row.get(col, "") for col in group_cols)
         groups[key].append(row)
-
-    sequences = []
-    conn_info: list[dict] = []
-    skipped = 0
-
+    prepared = []
     for key, group_rows in groups.items():
         if len(group_rows) < seq_len:
-            skipped += 1
             continue
+        group_rows.sort(key=lambda row: _safe_float(row.get(sort_col, "0")))
+        prepared.append((key, group_rows))
+    return prepared
 
-        group_rows.sort(key=lambda r: _safe_float(r.get(sort_col, "0")))
+
+def _iter_sequence_batches(
+    prepared_groups: list[tuple[tuple, list[dict]]],
+    feature_cols: list[str],
+    seq_len: int,
+    batch_size: int = INFERENCE_BATCH_SIZE,
+):
+    """Yield every online window without materialising the full window set."""
+    if batch_size <= 0:
+        raise ValueError("inference batch size must be greater than zero")
+    sequences: list[np.ndarray] = []
+    window_info: list[dict] = []
+    for key, group_rows in prepared_groups:
         features = np.asarray(
             [_row_to_feature_vector(row, feature_cols) for row in group_rows],
             dtype=np.float32,
         )
-
         for start in range(len(features) - seq_len + 1):
             end = start + seq_len
             sequences.append(features[start:end])
             first = group_rows[start]
-            conn_info.append(
+            window_info.append(
                 {
+                    "group_key": key,
                     "src": first.get("src_ip", "?"),
                     "dst": first.get("dst_ip", "?"),
                     "port": first.get("dst_port", "?"),
@@ -168,22 +179,15 @@ def _build_sequences(
                     "gap_cv": _safe_float(first.get("gap_rolling_cv", "0")),
                 }
             )
-
-    logger.info(
-        "LSTM: built %d sequences from %d groups (%d skipped with fewer than %d rows)",
-        len(sequences),
-        len(groups),
-        skipped,
-        seq_len,
-    )
-
-    if not sequences:
-        return np.empty((0, seq_len, len(feature_cols)), dtype=np.float32), conn_info
-    return np.asarray(sequences, dtype=np.float32), conn_info
+            if len(sequences) == batch_size:
+                yield np.asarray(sequences, dtype=np.float32), window_info
+                sequences, window_info = [], []
+    if sequences:
+        yield np.asarray(sequences, dtype=np.float32), window_info
 
 
-def _extract_features(csv_text: str) -> Optional[tuple[np.ndarray, list[dict]]]:
-    """Parse CSV text and build sequences exactly like the training pipeline."""
+def _extract_rows(csv_text: str) -> Optional[tuple[list[dict], list[str], int, list[str], str]]:
+    """Parse and validate online feature rows against the deployed model contract."""
     if not _load_artifacts():
         return None
 
@@ -216,12 +220,7 @@ def _extract_features(csv_text: str) -> Optional[tuple[np.ndarray, list[dict]]]:
         logger.warning("LSTM CSV missing required columns %s; skipping detection", missing)
         return None
 
-    sequences, conn_info = _build_sequences(rows, feature_cols, seq_len, group_cols, sort_col)
-    if sequences.shape[0] == 0:
-        logger.info("No groups had enough rows to build LSTM sequences; skipping detection")
-        return None
-
-    return sequences, conn_info
+    return rows, feature_cols, seq_len, group_cols, sort_col
 
 
 def _risk_level(probability: float) -> str:
@@ -250,54 +249,66 @@ def _default_threshold() -> float:
     return _decision_threshold
 
 
-def predict_beacons(csv_text: str, threshold: float | None = None) -> Optional[dict]:
+def predict_beacons(
+    csv_text: str,
+    threshold: float | str | None = None,
+    *,
+    batch_size: int = INFERENCE_BATCH_SIZE,
+) -> Optional[dict]:
     """Run LSTM detection on LSTM feature CSV text."""
-    extracted = _extract_features(csv_text)
+    if batch_size <= 0:
+        raise ValueError("inference batch size must be greater than zero")
+    extracted = _extract_rows(csv_text)
     if extracted is None:
         return None
-
-    sequences, conn_info = extracted
-    if sequences.ndim != 3 or sequences.shape[0] == 0:
+    rows, feature_cols, seq_len, group_cols, sort_col = extracted
+    prepared_groups = _prepare_groups(rows, seq_len, group_cols, sort_col)
+    if not prepared_groups:
+        logger.info("No groups had enough rows to build LSTM sequences; skipping detection")
         return None
-
-    n_rows, seq_len, feature_count = sequences.shape
-    threshold = _default_threshold() if threshold is None else threshold
-
+    raw_threshold = _default_threshold() if threshold is None else threshold
     try:
-        flat = sequences.reshape(-1, feature_count)
-        scaled = _scaler.transform(flat).reshape(n_rows, seq_len, feature_count)
-    except Exception as exc:
-        logger.warning("Feature scaling failed: %s", exc)
-        return None
-
+        threshold = float(raw_threshold)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("threshold must be a number between 0 and 1") from exc
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("threshold must be between 0 and 1")
+    feature_count = len(feature_cols)
+    best_by_group: dict[tuple, tuple[float, dict]] = {}
+    total_windows = 0
     try:
-        probabilities = _keras_model.predict(scaled, verbose=0).flatten()
+        for sequences, window_info in _iter_sequence_batches(
+            prepared_groups, feature_cols, seq_len, batch_size
+        ):
+            n_rows = sequences.shape[0]
+            flat = sequences.reshape(-1, feature_count)
+            scaled = _scaler.transform(flat).reshape(n_rows, seq_len, feature_count)
+            probabilities = _keras_model.predict(scaled, verbose=0).flatten()
+            if len(probabilities) != len(window_info):
+                raise ValueError("model returned an unexpected prediction count")
+            total_windows += len(window_info)
+            for probability, info in zip(probabilities, window_info):
+                probability = float(probability)
+                current = best_by_group.get(info["group_key"])
+                if current is None or probability > current[0]:
+                    best_by_group[info["group_key"]] = (probability, info)
     except Exception as exc:
-        logger.warning("LSTM prediction failed: %s", exc)
+        logger.warning("LSTM batched prediction failed: %s", exc)
         return None
 
     beacons = []
-    for i, probability in enumerate(probabilities):
-        if probability >= threshold:
-            info = conn_info[i]
-            beacons.append(
-                {
-                    "src": info["src"],
-                    "dst": info["dst"],
-                    "port": info.get("port", "?"),
-                    "proto": info.get("proto", "?"),
-                    "confidence": round(float(probability) * 100, 1),
-                    "risk": _risk_level(float(probability)),
-                    "event_count": info["event_count"],
-                    "flow_gap": round(info["flow_gap"], 3),
-                    "gap_cv": round(info["gap_cv"], 3),
-                }
-            )
-
-    beacons = _deduplicate_beacons(beacons)
-    unique_connections = len(
-        {(item["src"], item["dst"], item.get("port"), item.get("proto")) for item in conn_info}
-    )
+    for probability, info in best_by_group.values():
+        if probability < threshold:
+            continue
+        beacons.append({
+            "src": info["src"], "dst": info["dst"],
+            "port": info.get("port", "?"), "proto": info.get("proto", "?"),
+            "confidence": round(probability * 100, 1),
+            "risk": _risk_level(probability), "event_count": info["event_count"],
+            "flow_gap": round(info["flow_gap"], 3), "gap_cv": round(info["gap_cv"], 3),
+        })
+    beacons.sort(key=lambda item: item["confidence"], reverse=True)
+    unique_connections = len(best_by_group)
     total_flagged = len(beacons)
 
     if total_flagged:
@@ -311,13 +322,18 @@ def predict_beacons(csv_text: str, threshold: float | None = None) -> Optional[d
             f"connection groups and found no beacon-like activity."
         )
 
-    logger.info("LSTM: %d/%d connection groups flagged", total_flagged, unique_connections)
+    logger.info(
+        "LSTM: evaluated all %d windows in batches of at most %d; %d/%d groups flagged",
+        total_windows, batch_size, total_flagged, unique_connections,
+    )
 
     return {
         "beacons": beacons,
         "total_connections": unique_connections,
         "total_flagged": total_flagged,
         "threshold": float(threshold),
+        "total_windows": total_windows,
+        "inference_batch_size": batch_size,
         "summary_text": summary,
     }
 

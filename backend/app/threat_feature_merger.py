@@ -54,7 +54,7 @@ class ThreatFeatureMerger:
             rita_connections, lstm_connections
         )
         
-        # 3. 构建连接索引（src, dst, port）
+        # 3. 构建连接索引（src, dst, port, protocol）
         all_connection_keys: Set[Tuple] = set()
         
         # 添加 RITA 检测的连接
@@ -65,20 +65,21 @@ class ThreatFeatureMerger:
         for conn_key in lstm_connections.keys():
             all_connection_keys.add(conn_key)
         
-        print(f"✓ 合并器: RITA 检测 {len(rita_connections)} 个威胁, "
-              f"LSTM 检测 {len(lstm_connections)} 个威胁, "
-              f"合并后共 {len(all_connection_keys)} 个唯一威胁")
+        print(
+            f"Merger: RITA={len(rita_connections)}, LSTM={len(lstm_connections)}, "
+            f"unique={len(all_connection_keys)}"
+        )
         
         # 4. 为每个唯一连接构建完整特征
         for conn_key in all_connection_keys:
-            src, dst, port = conn_key
+            src, dst, port, protocol = conn_key
             
             # 基础特征
             feature = {
                 'src_ip': src,
                 'dst_ip': dst,
                 'dst_port': port,
-                'protocol': '',
+                'protocol': protocol,
                 'detection_sources': [],  # 记录检测来源
             }
             
@@ -92,7 +93,9 @@ class ThreatFeatureMerger:
                     'threat_category': rita_feature.get('threat_category', 'unknown'),
                     'connection_count': rita_feature.get('connection_count', 0),
                     'total_bytes': rita_feature.get('total_bytes', 0),
-                    'rita': self.rita_evidence.get(conn_key, {}),
+                    # Detailed RITA evidence is indexed by src/dst/port because
+                    # older RITA schemas did not always expose protocol.
+                    'rita': self.rita_evidence.get((src, dst, port), {}),
                 })
                 feature['detection_sources'].append('RITA')
             else:
@@ -146,7 +149,7 @@ class ThreatFeatureMerger:
             )
         )
         
-        print(f"✓ 合并器: 生成 {len(merged_features)} 个完整威胁特征")
+        print(f"Merger: generated {len(merged_features)} complete threat features")
         
         return merged_features
     
@@ -158,6 +161,7 @@ class ThreatFeatureMerger:
                 feature.get('src_ip', ''),
                 feature.get('dst_ip', ''),
                 str(feature.get('dst_port', '')),
+                str(feature.get('protocol', '')).lower(),
             )
             connections[key] = feature
         return connections
@@ -174,6 +178,7 @@ class ThreatFeatureMerger:
                 beacon.get('src', ''),
                 beacon.get('dst', ''),
                 str(beacon.get('port', '')),
+                str(beacon.get('proto', '')).lower(),
             )
             connections[key] = beacon
         
@@ -184,16 +189,25 @@ class ThreatFeatureMerger:
         rita_connections: Dict[Tuple, Dict],
         lstm_connections: Dict[Tuple, Dict],
     ) -> Dict[Tuple, Dict]:
-        """Align RITA's ``::`` destination with one unambiguous LSTM flow."""
+        """Align incomplete legacy RITA endpoints with one unambiguous LSTM flow.
+
+        Some RITA exports use ``::`` for destination or omit protocol.  They
+        may inherit those fields only when exactly one compatible LSTM flow
+        exists, so unrelated connections are never combined by guesswork.
+        """
         aligned = dict(rita_connections)
         wildcard_destinations = {"", "::", "unknown", "-"}
         for key, value in list(rita_connections.items()):
-            src, dst, port = key
-            if str(dst).strip().lower() not in wildcard_destinations:
+            src, dst, port, protocol = key
+            destination_is_wildcard = str(dst).strip().lower() in wildcard_destinations
+            if not destination_is_wildcard and protocol:
                 continue
             matches = [
                 candidate for candidate in lstm_connections
-                if candidate[0] == src and candidate[2] == port
+                if candidate[0] == src
+                and candidate[2] == port
+                and (destination_is_wildcard or candidate[1] == dst)
+                and (not protocol or not candidate[3] or candidate[3] == protocol)
             ]
             if len(matches) == 1:
                 aligned.pop(key, None)

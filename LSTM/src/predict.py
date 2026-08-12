@@ -1,7 +1,7 @@
 """Offline inference for the deployed all-TCP C2 beacon LSTM.
 
-This command uses the same feature schema, threshold file, communication-group
-aggregation, and maximum-window decision rule as ``backend/app/lstm_predictor``.
+This command uses the same feature schema, threshold file, full-window scan,
+batched inference, and communication-group maximum rule as the backend.
 """
 import argparse
 import json
@@ -18,13 +18,14 @@ sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 from config import (  # noqa: E402
     FEATURE_COLS,
-    MAX_WINDOWS_PER_GROUP,
     METADATA_PATH,
     MODEL_PATH,
     SCALER_PATH,
     THRESHOLD_PATH,
 )
 from data_prep import build_sequences, load_scaler, load_split, scale_sequences  # noqa: E402
+
+INFERENCE_BATCH_SIZE = 512
 
 
 def load_artifacts():
@@ -63,13 +64,19 @@ def predict_frame(
     *,
     max_windows_per_group: int = 0,
 ) -> dict:
-    """Score a feature frame and aggregate windows by communication group."""
+    """Score all selected windows in bounded model batches and aggregate groups."""
     X, labels, groups, window_metadata, stats = build_sequences(
         frame,
         seq_length=int(metadata["seq_length"]),
         max_windows_per_group=max_windows_per_group,
     )
-    probabilities = model.predict(scale_sequences(X, scaler), verbose=0).ravel()
+    probability_batches = []
+    for start in range(0, len(X), INFERENCE_BATCH_SIZE):
+        batch = X[start:start + INFERENCE_BATCH_SIZE]
+        probability_batches.append(
+            model.predict(scale_sequences(batch, scaler), verbose=0).ravel()
+        )
+    probabilities = np.concatenate(probability_batches)
     grouped: dict[str, list[int]] = {}
     for index, group in enumerate(groups):
         grouped.setdefault(str(group), []).append(index)
@@ -91,7 +98,9 @@ def predict_frame(
         "sequence_count": int(len(X)),
         "sequence_probabilities": probabilities,
         "labels": labels,
+        "group_keys": groups,
         "stats": stats,
+        "inference_batch_size": INFERENCE_BATCH_SIZE,
         "communications": communications,
     }
 
@@ -117,6 +126,8 @@ def _metrics(y_true: np.ndarray, probabilities: np.ndarray, threshold: float) ->
         "tn": tn, "fp": fp, "fn": fn, "tp": tp,
         "recall": tp / (tp + fn) if tp + fn else 0.0,
         "fpr": fp / (fp + tn) if fp + tn else 0.0,
+        "precision": tp / (tp + fp) if tp + fp else 0.0,
+        "f1": (2 * tp / (2 * tp + fp + fn)) if 2 * tp + fp + fn else 0.0,
     }
 
 
@@ -135,13 +146,30 @@ def main() -> None:
         scaler,
         metadata,
         threshold,
-        max_windows_per_group=MAX_WINDOWS_PER_GROUP if args.split else 0,
+        max_windows_per_group=0,
     )
     _print_result(result)
     if args.split:
-        window_metrics = _metrics(result["labels"], result["sequence_probabilities"], threshold)
-        print(f"Window metrics: recall={window_metrics['recall']:.4f}, FPR={window_metrics['fpr']:.4f}, "
-              f"TP={window_metrics['tp']}, FP={window_metrics['fp']}, FN={window_metrics['fn']}, TN={window_metrics['tn']}")
+        grouped: dict[str, list[int]] = {}
+        labels = result["labels"]
+        for index, group in enumerate(result["group_keys"]):
+            grouped.setdefault(str(group), []).append(index)
+        group_labels = np.asarray([int(np.max(labels[indexes])) for indexes in grouped.values()])
+        group_probabilities = np.asarray([
+            float(np.max(result["sequence_probabilities"][indexes]))
+            for indexes in grouped.values()
+        ])
+        group_metrics = _metrics(group_labels, group_probabilities, threshold)
+        print(
+            "Deployment-style all-window group metrics: "
+            f"recall={group_metrics['recall']:.4f}, FPR={group_metrics['fpr']:.4f}, "
+            f"precision={group_metrics['precision']:.4f}, F1={group_metrics['f1']:.4f}, "
+            f"TP={group_metrics['tp']}, FP={group_metrics['fp']}, "
+            f"FN={group_metrics['fn']}, TN={group_metrics['tn']}"
+        )
+        print(
+            "Use validation data, never the sealed test split, to select or change the threshold."
+        )
 
 
 if __name__ == "__main__":

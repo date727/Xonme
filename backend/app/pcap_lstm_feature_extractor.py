@@ -41,6 +41,8 @@ class _Connection:
     dst_ip: str
     dst_port: int
     direction_confidence: float
+    syn_sequence: int | None = None
+    closed: bool = False
     timestamps: list[float] = field(default_factory=list)
     orig_packets: int = 0
     resp_packets: int = 0
@@ -55,6 +57,27 @@ class _Connection:
         else:
             self.resp_packets += 1
             self.resp_bytes += packet_bytes
+
+
+def _should_start_new_connection(
+    current: _Connection | None,
+    timestamp: float,
+    syn_start: bool,
+    syn_sequence: int | None,
+) -> bool:
+    """Decide whether a packet starts a new use of the same TCP four-tuple.
+
+    A retransmitted opening SYN has the same sequence number and belongs to the
+    current connection.  A new SYN after FIN/RST, an idle timeout, or with a
+    different sequence number starts a new connection.
+    """
+    if current is None:
+        return True
+    if current.timestamps and timestamp - current.timestamps[-1] > IDLE_TIMEOUT_SECONDS:
+        return True
+    if not syn_start:
+        return False
+    return current.closed or current.syn_sequence != syn_sequence
 
 
 def _packet_iat_features(timestamps: list[float]) -> dict[str, float]:
@@ -133,6 +156,7 @@ class PcapLSTMFeatureExtractor:
                 reverse = (dst_ip, int(tcp.dport), src_ip, int(tcp.sport))
                 flags = int(tcp.flags)
                 syn_start = bool(flags & 0x02) and not bool(flags & 0x10)
+                syn_sequence = int(tcp.seq) if syn_start else None
                 timestamp = float(packet.time)
 
                 if syn_start:
@@ -147,14 +171,20 @@ class PcapLSTMFeatureExtractor:
                     key, confidence = forward, 0.0
 
                 current = active.get(key)
-                stale = current is not None and current.timestamps and timestamp - current.timestamps[-1] > IDLE_TIMEOUT_SECONDS
-                if current is None or stale or syn_start:
+                if _should_start_new_connection(current, timestamp, syn_start, syn_sequence):
                     if current is not None:
                         completed.append(current)
-                    current = _Connection(self.source_file, *key, direction_confidence=confidence)
+                    current = _Connection(
+                        self.source_file,
+                        *key,
+                        direction_confidence=confidence,
+                        syn_sequence=syn_sequence,
+                    )
                     active[key] = current
                 is_originator = forward == key
                 current.add_packet(timestamp, is_originator, len(packet))
+                if flags & (0x01 | 0x04):  # FIN or RST
+                    current.closed = True
 
         completed.extend(active.values())
         rows = [self._connection_row(connection) for connection in completed if connection.timestamps]

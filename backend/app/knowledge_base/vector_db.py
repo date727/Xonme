@@ -64,7 +64,7 @@ class VectorKnowledgeBase:
         model_path = str(embedding_model)
         print(f"正在加载 Embedding 模型: {model_path}")
         self.embedding_model = SentenceTransformer(model_path)
-        print("✓ Embedding 模型加载完成")
+        print("RAG: embedding model loaded")
         
         # 获取或创建集合
         self.collection = self.client.get_or_create_collection(
@@ -84,7 +84,7 @@ class VectorKnowledgeBase:
             batch_size: 批处理大小
         """
         if not documents:
-            print("⚠ 没有文档需要索引")
+            print("RAG: no documents to index")
             return
         
         # 清空现有集合（重建索引）
@@ -121,7 +121,7 @@ class VectorKnowledgeBase:
             
             print(f"  已处理 {min(i + batch_size, len(documents))}/{len(documents)} 个文档")
         
-        print(f"✓ 索引构建完成，当前集合包含 {self.collection.count()} 个文档")
+        print(f"RAG: index contains {self.collection.count()} documents")
     
     def search(
         self,
@@ -148,7 +148,7 @@ class VectorKnowledgeBase:
                 - text: 文档内容（可选）
         """
         if self.collection.count() == 0:
-            print("⚠ 知识库为空，请先构建索引")
+            print("RAG: knowledge base is empty; build the index first")
             return []
         
         # 生成查询向量
@@ -297,7 +297,7 @@ class VectorKnowledgeBase:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(export_data, f, ensure_ascii=False, indent=2)
         
-        print(f"✓ 知识库已导出到: {output_path}")
+        print(f"RAG: knowledge base exported to {output_path}")
 
 
 def main():

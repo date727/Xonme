@@ -57,10 +57,12 @@ try:
 except ImportError:
     _LSTM_AVAILABLE = False
 
-# RAG engine - core pipeline (Zeek -> RITA -> RAG -> AI)
+# Detection merging does not depend on optional RAG packages.
+from app.data_extractor import ThreatFeatureExtractor
+
+# RAG engine - optional attribution enrichment
 try:
     from app.rag_engine import ThreatAttributionEngine
-    from app.data_extractor import ThreatFeatureExtractor
 
     _RAG_AVAILABLE = True
 except ImportError as exc:
@@ -126,9 +128,12 @@ async def export_report(report_format: str, payload: ReportExportRequest) -> Res
     """Export the currently rendered report without storing a second copy."""
     if report_format not in {"docx", "pdf"}:
         raise HTTPException(status_code=404, detail="Unsupported report format")
-    from app.report_export import build_docx, build_pdf
+    from app.report_export import ReportFontError, build_docx, build_pdf
 
-    content = build_docx(payload.markdown) if report_format == "docx" else build_pdf(payload.markdown)
+    try:
+        content = build_docx(payload.markdown) if report_format == "docx" else build_pdf(payload.markdown)
+    except ReportFontError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     media_type = (
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         if report_format == "docx" else "application/pdf"
@@ -517,6 +522,62 @@ def _build_sample_rag_context(
     return "\n".join(sections), results
 
 
+def _merge_detection_results(
+    csv_text: str,
+    *,
+    rita_ok: bool,
+    lstm_results: dict | None,
+    rita_imported: bool = False,
+    rita_db_name: str | None = None,
+) -> list[dict]:
+    """Merge RITA/LSTM detections independently of optional attribution."""
+    from app.threat_feature_merger import merge_threat_features
+
+    rita_features = []
+    if rita_ok:
+        extractor = ThreatFeatureExtractor(csv_text)
+        rita_features = extractor.extract_all()
+        print(f"Detection merge: extracted {len(rita_features)} RITA threat(s)")
+    else:
+        print("Detection merge: RITA unavailable, using LSTM-only features")
+
+    has_lstm_alerts = bool(
+        lstm_results and lstm_results.get("total_flagged", 0) > 0
+    )
+    if not rita_features and not has_lstm_alerts:
+        print("Detection merge: no threats detected by RITA or LSTM")
+        return []
+
+    rita_evidence = {}
+    if rita_imported and rita_db_name:
+        try:
+            from app.rita_feature_exporter import export_rita_connection_evidence
+
+            rita_evidence = export_rita_connection_evidence(rita_db_name)
+        except Exception as exc:
+            print(f"RITA: detailed mixtape evidence unavailable - {exc}")
+    merged = merge_threat_features(rita_features, lstm_results, rita_evidence)
+    print(f"Detection merge: {len(merged)} unique threat(s) ready")
+    return merged
+
+
+def _run_optional_attribution(
+    merged_features: list[dict],
+    *,
+    job: AnalysisJob | None = None,
+) -> tuple[str | None, list[dict]]:
+    """Attribute merged detections when RAG is available; never own detection."""
+    if not _RAG_AVAILABLE:
+        print("RAG: skipped (dependencies not installed)")
+        return None, []
+    if not merged_features:
+        print("RAG: no merged threats, skipping attribution")
+        return None, []
+    rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
+    print(f"RAG: searching for matching APT groups (top-{rag_engine.top_k})...")
+    return _build_sample_rag_context(rag_engine, merged_features, job=job)
+
+
 def _rag_evidence_appendix(rag_context: str | None) -> str:
     return f"\n\n---\n\n{rag_context}" if rag_context else ""
 
@@ -858,14 +919,19 @@ async def get_saved_analysis_dashboard(
         raise HTTPException(status_code=404, detail="未找到该分析任务")
     if record["status"] != "completed":
         raise HTTPException(status_code=409, detail="该任务尚未成功完成，暂无详细数据")
-    root = _owned_task_root(record, user)
-    dashboard_path = root / "visualization" / "dashboard.json"
-    try:
-        dashboard = json.loads(dashboard_path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="该任务的可视化数据不存在") from exc
-    except (OSError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=500, detail="读取任务可视化数据失败") from exc
+    dashboard = record.get("result_json")
+    if not isinstance(dashboard, dict) or not dashboard:
+        # Backward compatibility for records created before result_json was
+        # persisted.  New records use the database copy so task-directory
+        # relocation cannot make a completed dashboard disappear.
+        root = _owned_task_root(record, user)
+        dashboard_path = root / "visualization" / "dashboard.json"
+        try:
+            dashboard = json.loads(dashboard_path.read_text(encoding="utf-8"))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="该任务的可视化数据不存在") from exc
+        except (OSError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=500, detail="读取任务可视化数据失败") from exc
     return {
         "analysis": {
             "id": record["id"],
@@ -1009,40 +1075,19 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
 
             traceback.print_exc()
 
-    # RAG attribution uses merged RITA and LSTM features when available.
+    # Detection merging is independent from optional RAG attribution.
     rag_context = None
-    if not _RAG_AVAILABLE:
-        print("RAG: skipped (dependencies not installed)")
-    else:
-        try:
-            if (lstm_results and lstm_results.get("total_flagged", 0) > 0) or rita_ok:
-                from app.threat_feature_merger import merge_threat_features
-
-                rita_features = []
-                if rita_ok:
-                    print("RAG: extracting RITA threat features...")
-                    extractor = ThreatFeatureExtractor(csv_text)
-                    rita_features = extractor.extract_all()
-                    print(f"RAG: extracted {len(rita_features)} RITA threat(s)")
-                else:
-                    print("RAG: RITA unavailable, using LSTM-only features")
-
-                print("RAG: merging RITA and LSTM detection results...")
-                merged_features = merge_threat_features(rita_features, lstm_results)
-
-                if not merged_features:
-                    print("RAG: no threats found after merging, skipping attribution")
-                else:
-                    print("RAG: searching the knowledge base for every merged threat...")
-                    rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
-                    rag_context, _ = _build_sample_rag_context(rag_engine, merged_features)
-            else:
-                print("RAG: no threats detected by RITA or LSTM, skipping attribution")
-        except Exception as exc:
-            print(f"RAG: failed - {exc}")
-            import traceback
-
-            traceback.print_exc()
+    try:
+        merged_features = _merge_detection_results(
+            csv_text, rita_ok=rita_ok, lstm_results=lstm_results
+        )
+    except Exception as exc:
+        print(f"Detection merge: failed - {exc}")
+        merged_features = []
+    try:
+        rag_context, _ = _run_optional_attribution(merged_features)
+    except Exception as exc:
+        print(f"RAG: failed - {exc}")
 
     analysis_markdown = generate_ai_analysis(
         csv_text,
@@ -1221,64 +1266,37 @@ async def analyze_pcap_stream(
             rag_context = None
             merged_features: list[dict] = []
             rag_result: dict | None = None
-            if not _RAG_AVAILABLE:
-                print(
-                    "RAG: skipped (dependencies not installed: chromadb or sentence-transformers)"
+            try:
+                merged_features = _merge_detection_results(
+                    csv_text,
+                    rita_ok=rita_ok,
+                    lstm_results=lstm_results,
+                    rita_imported=rita_imported,
+                    rita_db_name=rita_db_name,
                 )
-            else:
-                try:
-                    rita_features = []
-                    if rita_ok:
-                        print("RAG: extracting RITA threat features from RITA CSV...")
-                        extractor = ThreatFeatureExtractor(csv_text)
-                        rita_features = extractor.extract_all()
-                        print(f"RAG: extracted {len(rita_features)} RITA threat(s)")
-                    else:
-                        print("RAG: RITA unavailable, using LSTM-only features")
+            except AnalysisCancelled:
+                raise
+            except Exception as exc:
+                # Detection results must remain a separate stage from optional
+                # attribution so its failure is explicit in the task log.
+                print(f"Detection merge: failed - {exc}")
+                import traceback
 
-                    if rita_features or (
-                        lstm_results and lstm_results.get("total_flagged", 0) > 0
-                    ):
-                        from app.threat_feature_merger import merge_threat_features
+                traceback.print_exc()
 
-                        rita_evidence = {}
-                        if rita_imported:
-                            try:
-                                from app.rita_feature_exporter import export_rita_connection_evidence
-                                rita_evidence = export_rita_connection_evidence(rita_db_name)
-                            except Exception as exc:
-                                print(f"RITA: detailed mixtape evidence unavailable - {exc}")
-                        print("RAG: merging RITA and LSTM detection results...")
-                        merged_features = merge_threat_features(rita_features, lstm_results, rita_evidence)
+            try:
+                rag_context, rag_results = _run_optional_attribution(
+                    merged_features, job=job
+                )
+                _raise_if_cancelled(job)
+                rag_result = rag_results[0] if rag_results else None
+            except AnalysisCancelled:
+                raise
+            except Exception as exc:
+                print(f"RAG: failed - {exc}")
+                import traceback
 
-                        if not merged_features:
-                            print("RAG: no threats found after merging, skipping attribution")
-                        else:
-                            print(
-                                f"RAG: merged features ready ({len(merged_features)} unique threats)"
-                            )
-                            print("RAG: initializing knowledge base + embedding model...")
-                            rag_engine = ThreatAttributionEngine(
-                                kb_path=APP_ROOT / "chroma_db"
-                            )
-                            print(
-                                f"RAG: searching for matching APT groups (top-{rag_engine.top_k})..."
-                            )
-
-                            rag_context, rag_results = _build_sample_rag_context(
-                                rag_engine, merged_features, job=job
-                            )
-                            _raise_if_cancelled(job)
-                            rag_result = rag_results[0] if rag_results else None
-                    else:
-                        print("RAG: no threats detected by RITA or LSTM, skipping attribution")
-                except AnalysisCancelled:
-                    raise
-                except Exception as exc:
-                    print(f"RAG: failed - {exc}")
-                    import traceback
-
-                    traceback.print_exc()
+                traceback.print_exc()
             _write_json(artifacts.merged_dir / "threats.json", merged_features)
             _write_json(
                 artifacts.rag_dir / "result.json",

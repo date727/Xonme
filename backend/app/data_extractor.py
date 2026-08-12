@@ -83,7 +83,7 @@ class RITADataExtractor:
         # 统一列名风格，兼容 RITA v5 的 "Beacon Score"、"Source IP" 等字段
         self.rows = [self._normalize_row(row) for row in parsed_rows]
         
-        print(f"✓ 解析了 {len(self.rows)} 条 RITA 记录")
+        print(f"RITA: parsed {len(self.rows)} records")
     
     def extract_high_risk(self) -> list[dict]:
         """
@@ -145,7 +145,7 @@ class RITADataExtractor:
             # 调试：打印每条记录的评分
             src_ip = self._pick(row, "src", "src_ip", "source", "source_ip") or "unknown"
             dst_ip = self._pick(row, "dst", "dst_ip", "destination", "destination_ip") or "unknown"
-            print(f"  📊 [{src_ip} → {dst_ip}] "
+            print(f"  RITA [{src_ip} -> {dst_ip}] "
                   f"severity={severity or 'none'}, "
                   f"beacon={beacon_score:.1f}, "
                   f"long_conn={long_conn_value:.1f}, "
@@ -184,7 +184,7 @@ class RITADataExtractor:
                     reasons.append(f"c2_dns_score≥0.5")
                 if subdomain_count > 0 and subdomain_count >= self.C2_DNS_THRESHOLDS["base"]:
                     reasons.append(f"subdomain≥{self.C2_DNS_THRESHOLDS['base']}")
-                print(f"    ✓ 标记为高危: {', '.join(reasons)}")
+                print(f"    RITA high risk: {', '.join(reasons)}")
                 
                 port_proto_service = self._pick(row, "port_proto_service") or ""
                 dst_port = (
@@ -192,11 +192,17 @@ class RITADataExtractor:
                     or self._extract_port(port_proto_service)
                     or "unknown"
                 )
+                protocol = (
+                    self._pick(row, "protocol", "proto", "ip_protocol")
+                    or self._extract_protocol(port_proto_service)
+                    or ""
+                ).lower()
 
                 connection = {
                     "src_ip": self._pick(row, "src", "src_ip", "source", "source_ip") or "unknown",
                     "dst_ip": self._pick(row, "dst", "dst_ip", "destination", "destination_ip") or "unknown",
                     "dst_port": dst_port,
+                    "protocol": protocol,
                     "beacon_score": beacon_score,
                     "long_conn_value": long_conn_value,
                     "c2_over_dns_value": c2_dns_value,
@@ -212,7 +218,7 @@ class RITADataExtractor:
                 }
                 self.high_risk_connections.append(connection)
         
-        print(f"✓ 提取了 {len(self.high_risk_connections)} 个高危连接")
+        print(f"RITA: extracted {len(self.high_risk_connections)} high-risk connections")
         return self.high_risk_connections
     
     def _categorize_threat(self, beacon_score: float, long_conn: float, c2_dns: float, severity: str = "") -> str:
@@ -281,6 +287,14 @@ class RITADataExtractor:
             return ""
         parts = str(port_proto_service).split(":")
         return parts[0].strip() if parts else ""
+
+    @staticmethod
+    def _extract_protocol(port_proto_service: str) -> str:
+        """Extract the protocol from a ``port:protocol:service`` value."""
+        if not port_proto_service:
+            return ""
+        parts = str(port_proto_service).split(":")
+        return parts[1].strip() if len(parts) > 1 else ""
     
     @staticmethod
     def _safe_float(value: str) -> float:
@@ -322,7 +336,7 @@ class ZeekLogExtractor:
         self._parse_tsv("dns.log", self.dns_log)
         self._parse_tsv("http.log", self.http_log)
         
-        print(f"✓ Zeek 日志解析完成:")
+        print("Zeek: log parsing completed:")
         print(f"  - conn.log: {len(self.conn_log)} 条")
         print(f"  - ssl.log: {len(self.ssl_log)} 条")
         print(f"  - dns.log: {len(self.dns_log)} 条")
@@ -371,7 +385,7 @@ class ZeekLogExtractor:
                 target_list.append(row)
                 
         except Exception as e:
-            print(f"⚠ 解析 {filename} 失败: {e}")
+            print(f"Zeek: failed to parse {filename}: {e}")
     
     def get_connection_details(self, src_ip: str, dst_ip: str) -> dict:
         """
@@ -503,10 +517,10 @@ class ThreatFeatureExtractor:
         high_risk = self.rita_extractor.extract_high_risk()
         
         if not high_risk:
-            print("⚠ 没有检测到高危连接")
+            print("RITA: no high-risk connections detected")
             return []
         
-        print(f"✓ 提取了 {len(high_risk)} 个完整威胁特征")
+        print(f"RITA: extracted {len(high_risk)} complete threat features")
         return high_risk
 
 

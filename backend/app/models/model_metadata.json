@@ -38,6 +38,10 @@
     10,
     24
   ],
+  "training_window_sampling": {
+    "max_windows_per_group": 200,
+    "strategy": "uniform"
+  },
   "labels": {
     "0": "benign",
     "1": "c2"

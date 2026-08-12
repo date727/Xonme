@@ -46,9 +46,9 @@ class STIXParser:
         for fp in self.stix_paths:
             objects = self.load_file(fp)
             all_objects.extend(objects)
-            print(f"✓ 加载: {fp.name} ({len(objects)} 个对象)")
+            print(f"STIX: loaded {fp.name} ({len(objects)} objects)")
         self.data = {"objects": all_objects}
-        print(f"✓ 共加载 {len(self.stix_paths)} 个文件, {len(all_objects)} 个 STIX 对象")
+        print(f"STIX: loaded {len(self.stix_paths)} files and {len(all_objects)} objects")
 
     def parse(self) -> None:
         """解析 STIX 对象，分类存储（支持多文件去重合并）"""
@@ -121,7 +121,7 @@ class STIXParser:
                         "description": obj.get("description", ""),
                     })
 
-        print(f"✓ 解析完成:")
+        print("STIX: parsing completed:")
         print(f"  - APT 组织: {len(self.groups)}")
         print(f"  - 攻击技术: {len(self.techniques)}")
         print(f"  - 恶意软件/工具: {len(self.software)}")
@@ -193,7 +193,7 @@ class STIXParser:
                 "c2_technique_count": len(c2_techniques),
             }
             
-        print(f"✓ 构建了 {len(profiles)} 个组织档案")
+        print(f"STIX: built {len(profiles)} organization profiles")
         return profiles
     
     def build_rag_documents(self) -> list[dict]:
@@ -256,7 +256,7 @@ class STIXParser:
                 }
                 documents.append(document)
 
-        print(f"✓ 生成了 {len(documents)} 个 RAG 证据文档（粒度: 组织-技术，C2 判定依据: kill_chain_phases 含 command-and-control）")
+        print(f"STIX: generated {len(documents)} RAG evidence documents")
         return documents
     
     @staticmethod

@@ -23,7 +23,8 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 from config import (
-    BATCH_SIZE, C2_CLASS_WEIGHT_MULTIPLIER, EPOCHS, FEATURE_COLS, GROUP_COLS, LOGS_DIR, MAX_VALIDATION_FPR,
+    BATCH_SIZE, C2_CLASS_WEIGHT_MULTIPLIER, EPOCHS, FEATURE_COLS, GROUP_COLS, LOGS_DIR,
+    MAX_VALIDATION_FPR, MAX_WINDOWS_PER_GROUP,
     METADATA_PATH, MODEL_PATH, RUN_SEEDS, SEQ_LENGTH, SORT_COL, TARGET_RECALL,
     THRESHOLD_PATH,
 )
@@ -141,6 +142,10 @@ def finalize_existing_runs() -> dict:
     METADATA_PATH.write_text(json.dumps({
         "feature_cols": FEATURE_COLS, "seq_length": SEQ_LENGTH, "group_cols": GROUP_COLS,
         "sort_col": SORT_COL, "input_shape": [SEQ_LENGTH, len(FEATURE_COLS)],
+        "training_window_sampling": {
+            "max_windows_per_group": MAX_WINDOWS_PER_GROUP,
+            "strategy": "uniform",
+        },
         "labels": {"0": "benign", "1": "c2"}, "scope": "all_tcp_connection_beacon",
         "selected_seed": selected["seed"],
         "selection_policy": report["selection_policy"],
@@ -251,6 +256,10 @@ def train(seeds: tuple[int, ...] = RUN_SEEDS) -> dict:
     metadata = {
         "feature_cols": FEATURE_COLS, "seq_length": SEQ_LENGTH, "group_cols": GROUP_COLS,
         "sort_col": SORT_COL, "input_shape": [SEQ_LENGTH, len(FEATURE_COLS)],
+        "training_window_sampling": {
+            "max_windows_per_group": MAX_WINDOWS_PER_GROUP,
+            "strategy": "uniform",
+        },
         "labels": {"0": "benign", "1": "c2"}, "scope": "all_tcp_connection_beacon",
         "selected_seed": selected["seed"],
         "selection_policy": report["selection_policy"],
