@@ -139,3 +139,60 @@ def finish_analysis_record(
         record.report_path = report_path
         record.completed_at = datetime.utcnow()
         session.commit()
+
+
+def _record_to_dict(record: AnalysisRecord) -> dict:
+    """Return only the task data that an API endpoint may expose to its owner."""
+
+    return {
+        "id": record.id,
+        "original_filename": record.original_filename,
+        "storage_path": record.storage_path,
+        "file_size": record.file_size,
+        "status": record.status,
+        "result_json": record.result_json,
+        "report_markdown": record.report_markdown,
+        "created_at": record.created_at,
+        "completed_at": record.completed_at,
+    }
+
+
+def list_analysis_records(user_id: int) -> list[dict]:
+    """List one user's tasks without exposing filesystem paths to other users."""
+
+    with get_session_factory()() as session:
+        records = (
+            session.query(AnalysisRecord)
+            .filter(AnalysisRecord.user_id == user_id)
+            .order_by(AnalysisRecord.created_at.desc())
+            .all()
+        )
+        return [_record_to_dict(record) for record in records]
+
+
+def get_analysis_record_for_user(record_id: int, user_id: int) -> dict | None:
+    """Return a task only when it belongs to the requesting user."""
+
+    with get_session_factory()() as session:
+        record = (
+            session.query(AnalysisRecord)
+            .filter(AnalysisRecord.id == record_id, AnalysisRecord.user_id == user_id)
+            .one_or_none()
+        )
+        return _record_to_dict(record) if record else None
+
+
+def delete_analysis_record_for_user(record_id: int, user_id: int) -> bool:
+    """Delete one owned database record after its artifact directory is removed."""
+
+    with get_session_factory()() as session:
+        record = (
+            session.query(AnalysisRecord)
+            .filter(AnalysisRecord.id == record_id, AnalysisRecord.user_id == user_id)
+            .one_or_none()
+        )
+        if not record:
+            return False
+        session.delete(record)
+        session.commit()
+        return True

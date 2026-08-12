@@ -12,6 +12,7 @@ import io
 import json
 import subprocess
 from collections.abc import Iterable
+from typing import Any
 
 
 def _to_float_list(values: Iterable) -> list[float]:
@@ -166,3 +167,82 @@ def export_lstm_feature_csv_from_rita_db(
         writer.writerow(rec)
 
     return output.getvalue()
+
+
+def _number(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalise_key(key: str) -> str:
+    return "".join(char if char.isalnum() else "_" for char in key.lower()).strip("_")
+
+
+def _first(row: dict[str, Any], *names: str) -> Any:
+    normalised = {_normalise_key(key): value for key, value in row.items()}
+    for name in names:
+        value = normalised.get(_normalise_key(name))
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _service_parts(value: Any) -> tuple[str, str]:
+    values = value if isinstance(value, list) else [value]
+    if not values:
+        return "", ""
+    parts = str(values[0] or "").split(":")
+    return (parts[0] if parts else "", parts[1] if len(parts) > 1 else "")
+
+
+def export_rita_connection_evidence(
+    database: str,
+    clickhouse_container: str = "rita-clickhouse",
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """Return real, version-tolerant RITA mixtape evidence for dashboard use.
+
+    RITA v5 schemas vary between releases.  ``SELECT *`` intentionally keeps
+    this adapter schema-driven: absent score columns remain ``None`` instead of
+    being guessed or filled with presentation values.
+    """
+    if not database.replace("_", "").isalnum():
+        raise ValueError("Invalid RITA database name")
+    query = f"SELECT * FROM {database}.threat_mixtape FORMAT JSONEachRow"
+    proc = subprocess.run(
+        ["docker", "exec", clickhouse_container, "clickhouse-client", "-q", query],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for line in (proc.stdout or "").splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        port, protocol = _service_parts(_first(row, "port_proto_service"))
+        src, dst = str(_first(row, "src", "source", "source_ip") or ""), str(_first(row, "dst", "destination", "destination_ip") or "")
+        if not src or not dst:
+            continue
+        intervals = _to_float_list(_first(row, "ts_intervals") or [])
+        interval_counts = _to_float_list(_first(row, "ts_interval_counts") or [])
+        result[(src, dst, str(port))] = {
+            "protocol": protocol or None,
+            "timestamp_score": _number(_first(row, "timestamp_score", "time_score")),
+            "datasize_score": _number(_first(row, "datasize_score", "data_size_score")),
+            "duration_score": _number(_first(row, "duration_score")),
+            "histogram_score": _number(_first(row, "histogram_score", "hist_score")),
+            "ts_intervals": intervals or None,
+            "ts_interval_counts": interval_counts or None,
+            "connection_count": _number(_first(row, "count", "connection_count")),
+            "total_duration": _number(_first(row, "duration", "total_duration")),
+            "total_bytes": _number(_first(row, "total_bytes", "bytes")),
+            "long_connection": _number(_first(row, "long_conn_score", "long_connection_score")),
+            "c2_over_dns": _number(_first(row, "c2_over_dns_score", "c2_dns_score")),
+            "subdomain_count": _number(_first(row, "subdomains", "subdomain_count")),
+            "threat_intelligence": _first(row, "threat_intelligence", "threat_intel_score"),
+            "available_fields": sorted(row.keys()),
+        }
+    return result

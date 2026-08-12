@@ -24,7 +24,19 @@ const normalizeMarkdown = (value) => {
 const renderMarkdown = (text) => {
   const normalized = normalizeMarkdown(text);
   if (typeof marked !== "undefined" && typeof marked.parse === "function") {
-    return marked.parse(normalized);
+    const parsed = marked.parse(normalized);
+    const documentFragment = new DOMParser().parseFromString(parsed, "text/html");
+    documentFragment.querySelectorAll("script, iframe, object, embed, form, input, button, meta, link, style").forEach((node) => node.remove());
+    documentFragment.querySelectorAll("*").forEach((node) => {
+      Array.from(node.attributes).forEach((attribute) => {
+        const name = attribute.name.toLowerCase();
+        const value = attribute.value.trim().toLowerCase();
+        if (name.startsWith("on") || name === "style" || ((name === "href" || name === "src") && value.startsWith("javascript:"))) {
+          node.removeAttribute(attribute.name);
+        }
+      });
+    });
+    return documentFragment.body.innerHTML;
   }
   const escaped = normalized
     .replace(/&/g, "&amp;")
@@ -48,6 +60,7 @@ const statusEl = $("#status");
 const resultEl = $("#result");
 const reportPanel = $("#report-panel");
 const stepsEl = $("#steps");
+const openCurrentDataBtn = $("#open-current-data-btn");
 const modelSelect = $("#model-select");
 const caseTableBody = $("#case-table-body");
 const reportFormat = $("#report-format");
@@ -55,6 +68,10 @@ const downloadReportBtn = $("#download-report-btn");
 const printReportBtn = $("#print-report-btn");
 const caseRecommendation = $("#case-recommendation");
 const caseToast = $("#case-toast");
+const historyEmpty = $("#history-empty");
+const historyTableWrap = $("#history-table-wrap");
+const analysisHistoryBody = $("#analysis-history-body");
+const dataCenterHistoryBtn = $("#data-center-history-btn");
 
 let selectedFile = null;
 let analysisRunning = false;
@@ -62,6 +79,14 @@ let currentStep = null;
 let latestReportMarkdown = "";
 let activeController = null;
 let activeAnalysisId = null;
+let displayedAnalysisId = null;
+let latestVisualization = null;
+
+const setCurrentDataAvailable = (available) => {
+  if (!openCurrentDataBtn) return;
+  openCurrentDataBtn.disabled = !available;
+  openCurrentDataBtn.classList.toggle("ready", available);
+};
 
 const createAnalysisId = () =>
   window.crypto?.randomUUID?.() ||
@@ -100,7 +125,9 @@ const setReportDownloadEnabled = (enabled) => {
 };
 
 const setReportVisible = (visible) => {
-  if (reportPanel) reportPanel.hidden = !visible;
+  // Detection center deliberately has no report surface. The report is moved to
+  // the data-center's dedicated page when a completed dashboard is rendered.
+  void visible;
 };
 
 const setUploadLocked = (locked) => {
@@ -586,6 +613,23 @@ const buildTabHash = (tabName, params = new URLSearchParams()) => {
   return `#${tabName}${query ? `?${query}` : ""}`;
 };
 
+const loadAnalysisFromRoute = async (params) => {
+  if (!currentUser) return;
+  const recordId = Number(params?.get("analysis"));
+  if (!Number.isInteger(recordId) || recordId <= 0) return;
+  if (displayedAnalysisId === recordId && latestVisualization) {
+    window.C2SherlockVisualization?.render(latestVisualization);
+    return;
+  }
+  try {
+    const payload = await loadSavedAnalysisDashboard(recordId);
+    window.C2SherlockVisualization?.render(payload.dashboard, payload.analysis);
+  } catch (error) {
+    window.C2SherlockVisualization?.clear();
+    console.error("加载历史分析详情失败", error);
+  }
+};
+
 const switchTab = (tabName, options = {}) => {
   if (tabName === "profile" && !currentUser) {
     if (!sessionResolved) return;
@@ -604,6 +648,17 @@ const switchTab = (tabName, options = {}) => {
     history[method](null, "", buildTabHash(tabName, params));
   }
   renderCaseRecommendation();
+  if (tabName === "capability") {
+    const routeAnalysisId = Number(options.params?.get("analysis"));
+    if (!options.skipAnalysisLoad && Number.isInteger(routeAnalysisId) && routeAnalysisId > 0) {
+      void loadAnalysisFromRoute(options.params);
+    } else {
+      window.C2SherlockVisualization?.refresh();
+    }
+  }
+  if (tabName === "profile" && currentUser) {
+    void loadAnalysisHistory();
+  }
 };
 
 const setupTabs = () => {
@@ -800,7 +855,6 @@ const handleStreamEvent = (eventName, data) => {
 
   if (eventName === "delta") {
     const payload = JSON.parse(data);
-    setReportVisible(true);
     latestReportMarkdown += payload.content || "";
     resultEl.innerHTML = renderMarkdown(latestReportMarkdown);
     return;
@@ -810,9 +864,17 @@ const handleStreamEvent = (eventName, data) => {
     const payload = JSON.parse(data);
     const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
     latestReportMarkdown = markdown;
-    setReportVisible(true);
     resultEl.innerHTML = renderMarkdown(markdown);
     setReportDownloadEnabled(true);
+    latestVisualization = payload.visualization || null;
+    window.C2SherlockVisualization?.render(latestVisualization, {
+      original_filename: selectedFile?.name || payload.display_name,
+      file_size: selectedFile?.size,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      report_markdown: markdown,
+    });
+    setCurrentDataAvailable(Boolean(latestVisualization));
     markAllDone();
     setStatus("分析完成。");
     return;
@@ -859,6 +921,8 @@ const analyzeSelectedFile = async () => {
 
   setStatus("正在上传样本，请勿关闭页面。切换栏目不会中断当前分析。");
   latestReportMarkdown = "";
+  latestVisualization = null;
+  setCurrentDataAvailable(false);
   setReportDownloadEnabled(false);
   setReportVisible(false);
   resultEl.textContent = "分析任务运行中，报告将实时显示...";
@@ -927,6 +991,7 @@ const analyzeSelectedFile = async () => {
 };
 
 const renderCaseTable = () => {
+  if (!caseTableBody) return;
   const cases = [
     {
       no: 1,
@@ -1016,6 +1081,138 @@ const getApiError = async (response) => {
   }
 };
 
+const formatFileSize = (bytes) => {
+  const value = Number(bytes) || 0;
+  if (value < 1024) return `${value} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = value / 1024;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 100 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const formatAnalysisTime = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? "-" : date.toLocaleString("zh-CN", { hour12: false });
+};
+
+const renderAnalysisHistory = (analyses) => {
+  if (!analysisHistoryBody || !historyEmpty || !historyTableWrap) return;
+  historyEmpty.hidden = analyses.length > 0;
+  historyTableWrap.hidden = analyses.length === 0;
+  analysisHistoryBody.replaceChildren(...analyses.map((analysis, index) => {
+    const row = document.createElement("tr");
+    const conclusion = analysis.conclusion || { kind: "failed", label: "未知" };
+    const cells = [String(index + 1), analysis.original_filename || "-", formatFileSize(analysis.file_size), formatAnalysisTime(analysis.created_at)];
+    cells.forEach((value) => {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    const conclusionCell = document.createElement("td");
+    const pill = document.createElement("span");
+    pill.className = `conclusion-pill ${conclusion.kind || "failed"}`;
+    pill.textContent = conclusion.label || "未知";
+    conclusionCell.appendChild(pill);
+    row.appendChild(conclusionCell);
+
+    const detailCell = document.createElement("td");
+    const detailButton = document.createElement("button");
+    detailButton.type = "button";
+    detailButton.className = "history-action";
+    detailButton.dataset.historyDetail = String(analysis.id);
+    detailButton.textContent = "详细数据";
+    detailButton.disabled = analysis.status !== "completed";
+    detailCell.appendChild(detailButton);
+    row.appendChild(detailCell);
+
+    const deleteCell = document.createElement("td");
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "history-action delete";
+    deleteButton.dataset.historyDelete = String(analysis.id);
+    deleteButton.textContent = "删除";
+    deleteButton.disabled = analysis.status === "processing";
+    deleteCell.appendChild(deleteButton);
+    row.appendChild(deleteCell);
+    return row;
+  }));
+};
+
+const loadAnalysisHistory = async () => {
+  if (!currentUser || !analysisHistoryBody) return;
+  try {
+    const response = await fetch(`${apiBase}/analyses`, { credentials: "include" });
+    if (!response.ok) throw new Error(await getApiError(response));
+    const payload = await response.json();
+    renderAnalysisHistory(Array.isArray(payload.analyses) ? payload.analyses : []);
+  } catch (error) {
+    if (historyEmpty) {
+      historyEmpty.hidden = false;
+      historyEmpty.textContent = error instanceof Error ? `加载分析历史失败：${error.message}` : "加载分析历史失败，请稍后重试。";
+    }
+    if (historyTableWrap) historyTableWrap.hidden = true;
+  }
+};
+
+const loadSavedAnalysisDashboard = async (recordId) => {
+  const response = await fetch(`${apiBase}/analyses/${recordId}/dashboard`, { credentials: "include" });
+  if (!response.ok) throw new Error(await getApiError(response));
+  const payload = await response.json();
+  if (!payload.dashboard || typeof payload.dashboard !== "object") {
+    throw new Error("该任务未返回有效的可视化数据。");
+  }
+  displayedAnalysisId = recordId;
+  latestVisualization = payload.dashboard;
+  latestReportMarkdown = normalizeMarkdown(payload.analysis?.report_markdown || "");
+  if (resultEl) resultEl.innerHTML = renderMarkdown(latestReportMarkdown || "暂无 AI 分析报告。");
+  setReportDownloadEnabled(Boolean(latestReportMarkdown));
+  return payload;
+};
+
+const openSavedAnalysisDashboard = async (recordId) => {
+  const payload = await loadSavedAnalysisDashboard(recordId);
+  const params = new URLSearchParams();
+  params.set("analysis", String(recordId));
+  switchTab("capability", { params, push: true, skipAnalysisLoad: true });
+  if (!window.C2SherlockVisualization) {
+    throw new Error("数据中心组件未正确加载，请刷新页面后重试。");
+  }
+  window.C2SherlockVisualization.render(payload.dashboard, payload.analysis);
+};
+
+const deleteSavedAnalysis = async (recordId) => {
+  if (!window.confirm("删除后将永久移除该任务的 Zeek、RITA、LSTM、RAG、报告和可视化数据，确定继续吗？")) return;
+  const response = await fetch(`${apiBase}/analyses/${recordId}`, { method: "DELETE", credentials: "include" });
+  if (!response.ok) throw new Error(await getApiError(response));
+  if (displayedAnalysisId === recordId) {
+    displayedAnalysisId = null;
+    window.C2SherlockVisualization?.clear();
+  }
+  await loadAnalysisHistory();
+};
+
+const setupAnalysisHistory = () => {
+  analysisHistoryBody?.addEventListener("click", async (event) => {
+    const detailButton = event.target.closest("[data-history-detail]");
+    const deleteButton = event.target.closest("[data-history-delete]");
+    const button = detailButton || deleteButton;
+    if (!button) return;
+    button.disabled = true;
+    try {
+      if (detailButton) await openSavedAnalysisDashboard(Number(detailButton.dataset.historyDetail));
+      if (deleteButton) await deleteSavedAnalysis(Number(deleteButton.dataset.historyDelete));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "操作失败，请稍后重试。");
+    } finally {
+      button.disabled = false;
+    }
+  });
+};
+
 const setAuthMode = (mode) => {
   const isLogin = mode === "login";
   $$(".auth-tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.authMode === mode));
@@ -1060,12 +1257,14 @@ const renderAccount = () => {
   }
   if (logoutBtn) logoutBtn.hidden = !isLoggedIn;
   if (isLoggedIn) {
+    if (dataCenterHistoryBtn) dataCenterHistoryBtn.hidden = false;
     $("#profile-avatar").textContent = currentUser.username.slice(0, 1).toUpperCase();
     $("#profile-username").textContent = currentUser.username;
     $("#profile-email").textContent = currentUser.email;
     const date = new Date(currentUser.created_at);
     $("#profile-created-at").textContent = Number.isNaN(date.valueOf()) ? "" : `注册时间：${date.toLocaleString("zh-CN")}`;
   }
+  if (!isLoggedIn && dataCenterHistoryBtn) dataCenterHistoryBtn.hidden = true;
 };
 
 const loadSession = async () => {
@@ -1077,6 +1276,11 @@ const loadSession = async () => {
   }
   sessionResolved = true;
   renderAccount();
+  if (currentUser) void loadAnalysisHistory();
+  const routeState = getHashState();
+  if (currentUser && routeState.tab === "capability") {
+    void loadAnalysisFromRoute(routeState.params);
+  }
   if (getHashState().tab === "profile") switchTab("profile");
 };
 
@@ -1178,8 +1382,14 @@ setupApiConfig();
 setupUpload();
 setupCaseExamples();
 renderCaseTable();
+setupAnalysisHistory();
 setupAuthentication();
 setReportVisible(false);
+openCurrentDataBtn?.addEventListener("click", () => {
+  if (!latestVisualization) return;
+  switchTab("capability", { push: true });
+  window.C2SherlockVisualization?.render(latestVisualization);
+});
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
 cancelBtn?.addEventListener("click", cancelAnalysis);
 downloadReportBtn?.addEventListener("click", downloadReport);

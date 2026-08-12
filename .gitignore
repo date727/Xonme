@@ -5,6 +5,8 @@ backend/.env
 backend/.jwt_secret
 backend/uploads/
 backend/outputs/
+backend/data/analysis_runs/
+backend/data/guest_jobs/
 backend/chroma_db
 backend/local_models
 attack-stix-data

@@ -164,6 +164,11 @@ button {
   animation: fadeUp 0.24s ease-out;
 }
 
+/* Keep the native hidden attribute authoritative over component display rules. */
+[hidden] {
+  display: none !important;
+}
+
 .hero {
   position: relative;
   display: grid;
@@ -885,11 +890,14 @@ p {
   box-shadow: var(--soft-shadow);
 }
 
-.profile-details { min-width: 0; flex: 1; }
-.profile-hero h1 { margin: 3px 0 8px; }
+.profile-details { display: grid; min-width: 0; flex: 1; align-content: center; row-gap: 16px; padding-left: 32px; }
 .profile-avatar { width: 76px; height: 76px; font-size: 28px; flex: 0 0 auto; }
-.profile-meta { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
-.profile-password-btn { display: inline-flex; align-items: center; gap: 7px; margin-top: 17px; border: 1px solid rgba(20, 191, 130, .42); border-radius: 10px; padding: 9px 13px; color: var(--green-dark); background: rgba(255, 255, 255, .78); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: border-color .18s ease, color .18s ease, transform .18s ease; }
+.profile-info-row, .profile-action-row { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 42px; align-items: center; column-gap: 24px; }
+.profile-info-row p, .profile-action-row p { display: flex; align-items: center; min-height: 42px; margin: 0; color: #334155; font-size: 15px; font-weight: 700; }
+.profile-info-row strong { color: inherit; font-size: inherit; font-weight: inherit; }
+.profile-action-row { margin-top: 0; }
+.profile-meta { color: inherit; font-size: inherit; white-space: nowrap; }
+.profile-password-btn { display: inline-flex; justify-self: start; align-items: center; gap: 7px; border: 1px solid rgba(20, 191, 130, .42); border-radius: 10px; padding: 9px 13px; color: var(--green-dark); background: rgba(255, 255, 255, .78); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; transition: border-color .18s ease, color .18s ease, transform .18s ease; }
 .profile-password-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.9; }
 .profile-password-btn:hover { border-color: var(--green); color: #056f54; transform: translateY(-1px); }
 .profile-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 18px; }
@@ -904,6 +912,23 @@ p {
 .form-message.error { color: #d8434e; }
 .form-message.success { color: var(--green-dark); }
 .history-empty { padding: 18px; border: 1px dashed #b9c9d6; border-radius: 12px; color: var(--muted); background: #fbfdff; line-height: 1.7; }
+.analysis-history-wrap { margin-top: 18px; }
+.analysis-history-table th, .analysis-history-table td { vertical-align: middle; }
+.analysis-history-table td:nth-child(2) { max-width: 230px; overflow-wrap: anywhere; }
+.analysis-history-table th:nth-child(5), .analysis-history-table td:nth-child(5),
+.analysis-history-table th:nth-child(6), .analysis-history-table td:nth-child(6),
+.analysis-history-table th:nth-child(7), .analysis-history-table td:nth-child(7) { text-align: left; }
+.analysis-history-actions { display: flex; justify-content: center; gap: 8px; }
+.history-action { min-height: 34px; padding: 7px 10px; border: 1px solid #b9c9d6; border-radius: 8px; color: #0f5f4c; background: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.history-action:hover { border-color: var(--green); background: #f0fdf7; }
+.history-action.delete { color: #b42318; border-color: #fecaca; }
+.history-action.delete:hover { border-color: #ef4444; background: #fff1f2; }
+.history-action:disabled { opacity: .55; cursor: not-allowed; }
+.conclusion-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 100px; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 750; white-space: nowrap; }
+.conclusion-pill.suspicious { color: #b42318; background: #fff1f2; }
+.conclusion-pill.normal { color: #067647; background: #ecfdf3; }
+.conclusion-pill.processing { color: #1d4ed8; background: #eff6ff; }
+.conclusion-pill.failed, .conclusion-pill.cancelled { color: #475569; background: #f1f5f9; }
 
 .password-modal { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(4, 18, 33, .48); backdrop-filter: blur(5px); }
 .password-modal[hidden] { display: none; }
@@ -1665,6 +1690,13 @@ code {
 .progress-panel h2 {
   margin-bottom: 0;
 }
+
+.progress-panel { position: relative; }
+.progress-title { padding-right: 112px; }
+.current-data-btn { position: absolute; top: 18px; right: 18px; min-height: 34px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 11px; color: #cbd5e1; background: #f8fafc; font: inherit; font-size: 13px; font-weight: 700; cursor: not-allowed; transition: border-color .2s ease, color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s ease; }
+.current-data-btn.ready { border-color: #a7f3d0; color: #047857; background: #ecfdf5; cursor: pointer; box-shadow: 0 4px 12px rgba(20, 191, 130, .14); animation: dataButtonGlow 1.8s ease-in-out infinite; }
+.current-data-btn.ready:hover { border-color: #14bf82; color: #fff; background: var(--green); transform: translateY(-1px); }
+@keyframes dataButtonGlow { 50% { box-shadow: 0 6px 18px rgba(20, 191, 130, .3); } }
 
 .result h1,
 .result h2,
@@ -3249,6 +3281,8 @@ code {
   .account-actions { width: 100%; justify-content: flex-end; }
   .profile-grid { grid-template-columns: 1fr; }
   .profile-hero { align-items: flex-start; padding: 22px; }
+  .profile-details { padding-left: 0; }
+  .profile-info-row, .profile-action-row { grid-template-columns: 1fr; row-gap: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -22,7 +22,8 @@ class ThreatFeatureMerger:
     def __init__(
         self,
         rita_features: List[Dict],
-        lstm_results: Dict | None
+        lstm_results: Dict | None,
+        rita_evidence: Dict[Tuple, Dict] | None = None,
     ):
         """
         初始化合并器
@@ -33,6 +34,7 @@ class ThreatFeatureMerger:
         """
         self.rita_features = rita_features
         self.lstm_results = lstm_results
+        self.rita_evidence = rita_evidence or {}
         
     def merge(self) -> List[Dict]:
         """
@@ -91,6 +93,7 @@ class ThreatFeatureMerger:
                     'threat_category': rita_feature.get('threat_category', 'unknown'),
                     'connection_count': rita_feature.get('connection_count', 0),
                     'total_bytes': rita_feature.get('total_bytes', 0),
+                    'rita': self.rita_evidence.get(conn_key, {}),
                 })
                 feature['detection_sources'].append('RITA')
             else:
@@ -102,6 +105,7 @@ class ThreatFeatureMerger:
                     'threat_category': 'lstm_only',
                     'connection_count': 0,
                     'total_bytes': 0,
+                    'rita': {},
                 })
             
             # 合并 LSTM 特征
@@ -192,7 +196,8 @@ class ThreatFeatureMerger:
 
 def merge_threat_features(
     rita_features: List[Dict],
-    lstm_results: Dict | None
+    lstm_results: Dict | None,
+    rita_evidence: Dict[Tuple, Dict] | None = None,
 ) -> List[Dict]:
     """
     合并 RITA 和 LSTM 的威胁检测结果
@@ -204,7 +209,7 @@ def merge_threat_features(
     Returns:
         合并后的威胁特征列表
     """
-    merger = ThreatFeatureMerger(rita_features, lstm_results)
+    merger = ThreatFeatureMerger(rita_features, lstm_results, rita_evidence)
     return merger.merge()
 
 

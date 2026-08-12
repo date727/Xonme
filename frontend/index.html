@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C2Sherlock 可视化分析平台</title>
-  <link rel="stylesheet" href="styles.css?v=20260808-auth-guest" />
+  <link rel="stylesheet" href="styles/base.css" />
+  <link rel="stylesheet" href="styles/visualization.css" />
 </head>
 <body>
   <header class="topbar">
@@ -19,7 +20,7 @@
       <button class="nav-btn active" data-tab="home"><span class="nav-icon">⌂</span>首页</button>
       <button class="nav-btn" data-tab="principle"><span class="nav-icon">□</span>原理</button>
       <button class="nav-btn" data-tab="tool"><span class="nav-icon">▷</span>检测中心</button>
-      <button class="nav-btn" data-tab="capability"><span class="nav-icon">▥</span>能力</button>
+      <button class="nav-btn" data-tab="capability"><span class="nav-icon">▥</span>数据中心</button>
       <button class="nav-btn" data-tab="profile"><span class="nav-icon">◌</span>个人中心</button>
     </nav>
     <div class="account-actions" id="account-actions">
@@ -176,7 +177,6 @@
 
       <section class="panel home-module">
         <div class="panel-title compact">
-          <p class="eyebrow">Core Capabilities</p>
           <h2>核心能力</h2>
         </div>
         <div class="core-grid">
@@ -205,7 +205,6 @@
 
       <section class="panel home-module">
         <div class="panel-title compact">
-          <p class="eyebrow">Demo Video</p>
           <h2>项目演示视频</h2>
           <p>通过完整演示了解 C2Sherlock 的检测、溯源与报告生成流程。</p>
         </div>
@@ -279,6 +278,7 @@
                 <h2>检测流程</h2>
                 <p>检测开始后，系统将依次完成以下分析步骤。</p>
               </div>
+              <button id="open-current-data-btn" class="current-data-btn" type="button" disabled>详细数据</button>
             </div>
             <ol id="steps" class="steps">
               <li data-step="zeek"><span>日志解析</span></li>
@@ -300,8 +300,8 @@
         </div>
       </section>
 
-      <section id="report-panel" class="panel result-panel" hidden aria-live="polite">
-        <div class="result-head"><div><p class="eyebrow">Analysis Report</p><h2>分析报告</h2></div><div class="report-actions" aria-label="分析报告下载"><select id="report-format" aria-label="选择报告格式"><option value="md">.md</option><option value="docx">.docx</option><option value="pdf">.pdf</option></select><button id="download-report-btn" class="report-download" type="button" disabled>下载</button><button id="print-report-btn" class="report-print" type="button" disabled>打印</button></div></div>
+      <section id="report-panel" class="panel result-panel" hidden aria-live="polite" data-legacy-report-panel>
+        <div class="result-head"><div><h2>分析报告</h2></div><div class="report-actions" aria-label="分析报告下载"><select id="report-format" aria-label="选择报告格式"><option value="md">.md</option><option value="docx">.docx</option><option value="pdf">.pdf</option></select><button id="download-report-btn" class="report-download" type="button" disabled>下载</button><button id="print-report-btn" class="report-print" type="button" disabled>打印</button></div></div>
         <div id="result" class="result">分析任务运行中，报告将实时显示在这里。</div>
       </section>
     </section>
@@ -611,62 +611,21 @@
     </section>
 
     <section id="capability" class="tab-page" data-page="capability">
-      <div class="section-heading page-heading">
-        <p class="eyebrow">Capability</p>
-        <h1>能力展示</h1>
-        <p>系统优势与历史样例表格。</p>
-      </div>
-
-      <section class="panel capability-module">
-        <div class="panel-title compact">
-          <h2>核心创新点</h2>
-          <p>围绕隐蔽 C2 检测、溯源与研判的四项关键能力。</p>
-        </div>
-        <div class="advantage-grid">
-          <article class="feature-card">
-            <span class="feature-icon">01</span>
-            <h3>内容无关检测</h3>
-            <p>不依赖载荷、黑名单或特征码，仅凭连接行为发现隐蔽 C2。</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon mint">02</span>
-            <h3>双引擎协同检测</h3>
-            <p>规则筛查典型 Beacon，LSTM 捕捉抖动、低频与弱周期异常。</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon cyan">03</span>
-            <h3>溯源分析延伸</h3>
-            <p>从异常告警走向 ATT&amp;CK 映射、APT 候选与归因线索输出。</p>
-          </article>
-          <article class="feature-card">
-            <span class="feature-icon blue">04</span>
-            <h3>可解释智能研判</h3>
-            <p>生成威胁概览、重点连接解释与处置建议，而不止风险分数。</p>
-          </article>
+      <section id="data-center-empty" class="panel data-center-empty" aria-labelledby="data-center-empty-title">
+        <div class="data-center-empty-icon" aria-hidden="true">▥</div>
+        <h1 id="data-center-empty-title">暂无分析结果</h1>
+        <p>完成一次 PCAP 分析后，这里将集中展示任务信息、可疑连接证据、溯源关联和 AI 分析报告。</p>
+        <div class="data-center-empty-actions">
+          <button class="primary" type="button" data-tab="tool">前往检测中心</button>
+          <button id="data-center-history-btn" class="secondary" type="button" data-tab="profile" hidden>从分析历史选择</button>
         </div>
       </section>
-
-      <section class="panel capability-module">
-        <div class="panel-title compact">
-          <h2>案例库</h2>
-          <p>展示系统历史案例，可查看样本特征、风险等级与分析结论。</p>
-        </div>
-        <div class="table-wrap">
-          <table class="case-table">
-            <thead>
-              <tr>
-                <th>序号</th>
-                <th>PCAP 包名称</th>
-                <th>源 IP</th>
-                <th>目标 IP/域名</th>
-                <th>时间</th>
-                <th>风险等级</th>
-                <th>风险评分</th>
-                <th>简要说明</th>
-              </tr>
-            </thead>
-            <tbody id="case-table-body"></tbody>
-          </table>
+      <section id="visualization-module" class="data-workspace" aria-label="分析数据中心" hidden style="display: none">
+        <aside class="data-sidebar"><p>本次分析</p><button class="data-nav active" data-data-page="overview">概览总览</button><button class="data-nav" data-data-page="topology">网络拓扑</button><button class="data-nav" data-data-page="rita">RITA 分析</button><button class="data-nav" data-data-page="lstm">LSTM 检测</button><button class="data-nav" data-data-page="attribution">溯源归因</button><button class="data-nav" data-data-page="report">AI 分析报告</button></aside>
+        <div id="data-center-new" class="data-content">
+          <section class="data-page active" data-data-content="overview"><h2>概览总览</h2><div id="analysis-meta" class="analysis-meta"></div><div class="visualization-grid"><article class="viz-kpi"><span>可疑连接数</span><strong id="viz-threat-count">0</strong></article><article class="viz-kpi"><span>最高 Beacon Score</span><strong id="viz-beacon-max">暂无数据</strong></article><article class="viz-kpi"><span>LSTM 最高置信度</span><strong id="viz-lstm-max">暂无数据</strong></article><article class="viz-kpi"><span>归因置信度</span><strong id="viz-rag-confidence">暂无数据</strong></article></div><article class="visualization-card"><h3>综合研判摘要</h3><p id="overview-summary"></p></article><article class="visualization-card"><h3>重点可疑连接</h3><div class="table-wrap"><table class="case-table"><tbody id="overview-threats"></tbody></table></div></article></section>
+          <section class="data-page" data-data-content="topology"><h2>网络拓扑</h2><article class="visualization-card topology-card"><div id="network-topology-chart" class="echart-canvas"></div></article><aside id="topology-evidence" class="evidence-drawer"><h3>当前分析连接</h3><div id="topology-evidence-body"></div></aside></section>
+          <section class="data-page" data-data-content="rita"><h2>RITA 分析</h2><div id="rita-content" class="visualization-empty">当前连接暂无 RITA 明细数据。</div></section><section class="data-page" data-data-content="lstm"><h2>LSTM 检测</h2><div id="lstm-content" class="visualization-empty">当前连接没有 LSTM 告警或可预测序列。</div></section><section class="data-page" data-data-content="attribution"><h2>候选归因</h2><div id="attribution-content" class="visualization-empty">暂无候选归因。</div></section>
         </div>
       </section>
 
@@ -676,18 +635,37 @@
       <div class="profile-hero">
         <div class="profile-avatar" id="profile-avatar">U</div>
         <div class="profile-details">
-          <p class="eyebrow">Account Center</p>
-          <h1 id="profile-username">个人中心</h1>
-          <p id="profile-email" class="subtitle">登录后可管理账号与查看已保存的分析记录。</p>
-          <p id="profile-created-at" class="profile-meta"></p>
-          <button id="change-password-open-btn" class="profile-password-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>修改密码</button>
+          <div class="profile-info-row">
+            <p>用户名：<strong id="profile-username">-</strong></p>
+            <p>邮箱：<strong id="profile-email">-</strong></p>
+          </div>
+          <div class="profile-action-row">
+            <p id="profile-created-at" class="profile-meta"></p>
+            <button id="change-password-open-btn" class="profile-password-btn" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/></svg>修改密码</button>
+          </div>
         </div>
       </div>
 
       <div class="profile-grid">
         <section class="panel profile-card profile-history-card">
-          <div class="panel-title compact"><p class="eyebrow">History</p><h2>分析历史</h2><p>已登录后发起的分析将自动保存到此账号。历史列表将在下一步接入展示。</p></div>
-          <div class="history-empty">游客分析不会保存；登录后开始一次新分析即可建立个人历史记录。</div>
+          <div class="panel-title compact"><h2>分析历史</h2><p>这里保存当前账号发起的分析任务。点击“详细数据”可在数据中心查看检测结果、可疑连接拓扑和溯源证据。</p></div>
+          <div id="history-empty" class="history-empty">暂无已保存的分析任务。完成一次登录后的 PCAP 分析后，结果会自动出现在这里。</div>
+          <div id="history-table-wrap" class="table-wrap analysis-history-wrap" hidden>
+            <table class="case-table analysis-history-table">
+              <thead>
+                <tr>
+                  <th>序号</th>
+                  <th>文件名</th>
+                  <th>文件大小</th>
+                  <th>分析时间</th>
+                  <th>检测结论</th>
+                  <th>详细数据</th>
+                  <th>删除</th>
+                </tr>
+              </thead>
+              <tbody id="analysis-history-body"></tbody>
+            </table>
+          </div>
         </section>
       </div>
 
@@ -697,7 +675,7 @@
   <div id="change-password-modal" class="password-modal" hidden aria-hidden="true">
     <section class="password-dialog" role="dialog" aria-modal="true" aria-labelledby="change-password-title">
       <button id="change-password-close-btn" class="password-modal-close" type="button" aria-label="关闭">×</button>
-      <div class="panel-title compact"><p class="eyebrow">Security</p><h2 id="change-password-title">修改密码</h2><p>修改成功后将退出登录，请使用新密码重新登录。</p></div>
+      <div class="panel-title compact"><h2 id="change-password-title">修改密码</h2><p>修改成功后将退出登录，请使用新密码重新登录。</p></div>
       <form id="change-password-form" class="account-form">
         <label><span>当前密码</span><input name="current_password" type="password" required autocomplete="current-password" /></label>
         <label><span>新密码</span><input name="new_password" type="password" required minlength="8" autocomplete="new-password" /></label>
@@ -709,7 +687,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <div id="case-toast" class="case-toast" hidden></div>
-  <script src="app.js?v=20260808-auth"></script>
+  <script src="js/visualization.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

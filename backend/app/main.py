@@ -1,6 +1,7 @@
 ﻿import json
 import hashlib
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -9,13 +10,14 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 # Ensure backend/ is on sys.path so `from app.xxx` imports work
@@ -35,9 +37,17 @@ from app.database import (
     User,
     check_database_connection,
     create_analysis_record,
+    delete_analysis_record_for_user,
     finish_analysis_record,
+    get_analysis_record_for_user,
+    list_analysis_records,
 )
-from app.auth import initialise_session_secret, get_optional_current_user, router as auth_router
+from app.auth import (
+    get_current_user,
+    get_optional_current_user,
+    initialise_session_secret,
+    router as auth_router,
+)
 
 # LSTM beacon detection - gracefully degrades if dependencies are missing
 try:
@@ -60,8 +70,10 @@ except ImportError as exc:
 load_dotenv()
 
 APP_ROOT = Path(__file__).resolve().parent.parent
-UPLOADS_DIR = APP_ROOT / "uploads"
-OUTPUTS_DIR = APP_ROOT / "outputs"
+DATA_DIR = APP_ROOT / "data"
+USER_RUNS_DIR = DATA_DIR / "analysis_runs" / "users"
+GUEST_JOBS_DIR = DATA_DIR / "guest_jobs"
+ARTIFACT_SCHEMA_VERSION = 1
 
 app = FastAPI()
 app.include_router(auth_router)
@@ -88,6 +100,11 @@ class AnalyzeResponse(BaseModel):
     analysis_markdown: str
 
 
+class ReportExportRequest(BaseModel):
+    markdown: str
+    filename: str = "c2sherlock-report"
+
+
 @app.get("/database/status")
 async def database_status() -> dict[str, bool]:
     """Provide a lightweight health check for the application database."""
@@ -102,6 +119,26 @@ async def list_report_models() -> dict:
         "default_model": DEFAULT_MODEL_KEY,
         "models": public_model_options(),
     }
+
+
+@app.post("/reports/{report_format}")
+async def export_report(report_format: str, payload: ReportExportRequest) -> Response:
+    """Export the currently rendered report without storing a second copy."""
+    if report_format not in {"docx", "pdf"}:
+        raise HTTPException(status_code=404, detail="Unsupported report format")
+    from app.report_export import build_docx, build_pdf
+
+    content = build_docx(payload.markdown) if report_format == "docx" else build_pdf(payload.markdown)
+    media_type = (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        if report_format == "docx" else "application/pdf"
+    )
+    safe_name = _safe_path_component(Path(payload.filename).stem, "c2sherlock-report")
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.{report_format}"'},
+    )
 
 
 class AnalysisCancelled(Exception):
@@ -129,8 +166,156 @@ def _prune_pending_cancellations() -> None:
 
 
 def ensure_dirs() -> None:
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    USER_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    GUEST_JOBS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+@dataclass(frozen=True)
+class AnalysisArtifacts:
+    """All files produced by one analysis, kept under one task directory."""
+
+    analysis_uuid: str
+    display_name: str
+    is_guest: bool
+    root: Path
+    input_path: Path
+    zeek_dir: Path
+    rita_dir: Path
+    lstm_dir: Path
+    merged_dir: Path
+    rag_dir: Path
+    report_dir: Path
+    visualization_dir: Path
+
+    @property
+    def manifest_path(self) -> Path:
+        return self.root / "manifest.json"
+
+    @property
+    def runtime_log_path(self) -> Path:
+        return self.root / "runtime.log"
+
+
+def _safe_path_component(value: str, fallback: str) -> str:
+    """Keep human-readable names while preventing a filename from changing paths."""
+
+    cleaned = re.sub(r"[^0-9A-Za-z_\-\u4e00-\u9fff]+", "_", value.strip())
+    return cleaned.strip("._-")[:80] or fallback
+
+
+def _allocate_artifacts(original_filename: str | None, user: User | None) -> AnalysisArtifacts:
+    """Create the task directory before processing so every artifact has one home."""
+
+    ensure_dirs()
+    original_name = Path(original_filename or "upload.pcap").name
+    safe_stem = _safe_path_component(Path(original_name).stem, "upload")
+    suffix = Path(original_name).suffix.lower() or ".pcap"
+
+    for _ in range(10):
+        analysis_uuid = uuid.uuid4().hex
+        if user:
+            timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+            display_name = f"{timestamp}_{safe_stem}_{analysis_uuid[:8]}"
+            root = USER_RUNS_DIR / _safe_path_component(user.username, "user") / display_name
+        else:
+            display_name = analysis_uuid
+            root = GUEST_JOBS_DIR / analysis_uuid
+        try:
+            root.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise RuntimeError("Unable to allocate analysis artifact directory")
+
+    paths = {
+        "input_path": root / "input" / f"{safe_stem}{suffix}",
+        "zeek_dir": root / "zeek",
+        "rita_dir": root / "rita",
+        "lstm_dir": root / "lstm",
+        "merged_dir": root / "merged",
+        "rag_dir": root / "rag",
+        "report_dir": root / "report",
+        "visualization_dir": root / "visualization",
+    }
+    for path in paths.values():
+        (path.parent if path.suffix else path).mkdir(parents=True, exist_ok=True)
+    return AnalysisArtifacts(
+        analysis_uuid=analysis_uuid,
+        display_name=display_name,
+        is_guest=user is None,
+        root=root,
+        **paths,
+    )
+
+
+def _write_json(path: Path, value: object) -> None:
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _append_runtime_log(artifacts: AnalysisArtifacts, message: str) -> None:
+    timestamp = datetime.now().astimezone().isoformat(timespec="seconds")
+    with artifacts.runtime_log_path.open("a", encoding="utf-8") as log_file:
+        log_file.write(f"[{timestamp}] {message}\n")
+
+
+def _write_manifest(
+    artifacts: AnalysisArtifacts,
+    *,
+    status: str,
+    original_filename: str,
+    user: User | None,
+    rita_db_name: str,
+    model_config: ModelConfig,
+    sha256: str | None = None,
+    file_size: int | None = None,
+    error: str | None = None,
+) -> None:
+    _write_json(
+        artifacts.manifest_path,
+        {
+            "schema_version": ARTIFACT_SCHEMA_VERSION,
+            "analysis_uuid": artifacts.analysis_uuid,
+            "display_name": artifacts.display_name,
+            "owner_type": "guest" if artifacts.is_guest else "user",
+            "username": user.username if user else None,
+            "original_filename": original_filename,
+            "sha256": sha256,
+            "file_size": file_size,
+            "status": status,
+            "rita_database": rita_db_name,
+            "models": {
+                "report": model_config.key,
+                "lstm": "lstm_beacon_detector" if _LSTM_AVAILABLE else None,
+                "rag": "mitre_attack_chroma" if _RAG_AVAILABLE else None,
+            },
+            "artifacts": {
+                "input": "input/",
+                "zeek": "zeek/",
+                "rita": "rita/",
+                "lstm": "lstm/",
+                "merged": "merged/threats.json",
+                "rag": "rag/",
+                "report": "report/analysis.md",
+                "visualization": "visualization/dashboard.json",
+            },
+            "updated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "error": error,
+        },
+    )
+
+
+def _set_manifest_status(artifacts: AnalysisArtifacts, status: str, error: str | None = None) -> None:
+    """Update terminal state without losing the upload metadata already recorded."""
+
+    try:
+        manifest = json.loads(artifacts.manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        manifest = {"schema_version": ARTIFACT_SCHEMA_VERSION, "analysis_uuid": artifacts.analysis_uuid}
+    manifest["status"] = status
+    manifest["error"] = error
+    manifest["updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    _write_json(artifacts.manifest_path, manifest)
 
 
 def make_rita_db_name(run_id: str) -> str:
@@ -528,22 +713,156 @@ def _file_sha256(file_path: Path) -> str:
     return digest.hexdigest()
 
 
-def _cleanup_guest_artifacts(
-    upload_path: Path | None, output_dir: Path | None, csv_path: Path | None
-) -> None:
+def _cleanup_guest_artifacts(artifacts: AnalysisArtifacts | None) -> None:
     """Remove transient files after an anonymous analysis has been streamed."""
 
-    for file_path in (upload_path, csv_path):
-        if file_path:
-            try:
-                file_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-    if output_dir:
-        try:
-            shutil.rmtree(output_dir, ignore_errors=True)
-        except OSError:
-            pass
+    if not artifacts or not artifacts.is_guest:
+        return
+    try:
+        artifacts.root.relative_to(GUEST_JOBS_DIR)
+    except ValueError:
+        return
+    shutil.rmtree(artifacts.root, ignore_errors=True)
+
+
+def _owned_task_root(record: dict, user: User) -> Path:
+    """Resolve a saved task directory and reject paths outside this user's area."""
+
+    root = Path(record["storage_path"]).resolve()
+    owner_root = (USER_RUNS_DIR / _safe_path_component(user.username, "user")).resolve()
+    try:
+        root.relative_to(owner_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="任务使用的是不受支持的旧存储路径") from exc
+    if root.parent != owner_root:
+        raise HTTPException(status_code=409, detail="任务目录结构无效，无法执行该操作")
+    return root
+
+
+def _task_conclusion(record: dict) -> dict[str, str]:
+    """Keep processing state distinct from the actual security conclusion."""
+
+    status = record["status"]
+    if status != "completed":
+        labels = {
+            "processing": "分析中",
+            "failed": "分析失败",
+            "cancelled": "已取消",
+        }
+        return {"kind": status, "label": labels.get(status, "未完成")}
+    dashboard = record.get("result_json") or {}
+    threats = dashboard.get("threats") if isinstance(dashboard, dict) else None
+    if isinstance(threats, list) and threats:
+        return {"kind": "suspicious", "label": "发现可疑 C2 行为"}
+    return {"kind": "normal", "label": "未发现可疑 C2 行为"}
+
+
+def _delete_rita_database(database_name: str) -> None:
+    """Delete only the generated RITA database for one confirmed task."""
+
+    if not re.fullmatch(r"run_[0-9a-f]{32}", database_name):
+        raise HTTPException(status_code=409, detail="RITA 数据库标识无效，已取消删除")
+    try:
+        result = subprocess.run(
+            ["rita", "delete", database_name],
+            input="y\n",
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="RITA 不可用，未删除任务数据") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="清理 RITA 数据库超时，未删除任务数据") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise HTTPException(status_code=500, detail=f"清理 RITA 数据库失败：{detail or '未知错误'}")
+
+
+@app.get("/analyses")
+async def list_saved_analyses(user: User = Depends(get_current_user)) -> dict:
+    """List only the current user's persisted analysis tasks."""
+
+    records = list_analysis_records(user.id)
+    return {
+        "analyses": [
+            {
+                "id": record["id"],
+                "original_filename": record["original_filename"],
+                "file_size": record["file_size"],
+                "status": record["status"],
+                "created_at": record["created_at"],
+                "completed_at": record["completed_at"],
+                "conclusion": _task_conclusion(record),
+            }
+            for record in records
+        ]
+    }
+
+
+@app.get("/analyses/{record_id}/dashboard")
+async def get_saved_analysis_dashboard(
+    record_id: int, user: User = Depends(get_current_user)
+) -> dict:
+    """Load the structured dashboard for one owned, completed analysis."""
+
+    record = get_analysis_record_for_user(record_id, user.id)
+    if not record:
+        raise HTTPException(status_code=404, detail="未找到该分析任务")
+    if record["status"] != "completed":
+        raise HTTPException(status_code=409, detail="该任务尚未成功完成，暂无详细数据")
+    root = _owned_task_root(record, user)
+    dashboard_path = root / "visualization" / "dashboard.json"
+    try:
+        dashboard = json.loads(dashboard_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="该任务的可视化数据不存在") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail="读取任务可视化数据失败") from exc
+    return {
+        "analysis": {
+            "id": record["id"],
+            "original_filename": record["original_filename"],
+            "file_size": record["file_size"],
+            "status": record["status"],
+            "created_at": record["created_at"],
+            "completed_at": record["completed_at"],
+            "report_markdown": record.get("report_markdown") or "",
+        },
+        "dashboard": dashboard,
+    }
+
+
+@app.delete("/analyses/{record_id}")
+async def delete_saved_analysis(record_id: int, user: User = Depends(get_current_user)) -> dict:
+    """Delete one owned task's RITA database, artifact directory, and DB record."""
+
+    record = get_analysis_record_for_user(record_id, user.id)
+    if not record:
+        raise HTTPException(status_code=404, detail="未找到该分析任务")
+    if record["status"] == "processing":
+        raise HTTPException(status_code=409, detail="分析任务仍在运行，暂时不能删除")
+
+    root = _owned_task_root(record, user)
+    rita_metadata_path = root / "rita" / "metadata.json"
+    rita_metadata: dict = {}
+    try:
+        rita_metadata = json.loads(rita_metadata_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail="读取 RITA 任务元数据失败") from exc
+
+    if rita_metadata.get("imported") or rita_metadata.get("available"):
+        _delete_rita_database(str(rita_metadata.get("database", "")))
+    try:
+        shutil.rmtree(root)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="删除任务目录失败，数据库记录已保留") from exc
+    if not delete_analysis_record_for_user(record_id, user.id):
+        raise HTTPException(status_code=500, detail="任务目录已删除，但数据库记录删除失败")
+    return {"deleted": True, "id": record_id}
 
 
 def sse_event(event: str, data: str) -> str:
@@ -569,13 +888,11 @@ async def cancel_analysis(analysis_id: str) -> dict[str, str]:
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
-    ensure_dirs()
-
-    name = uuid.uuid4().hex
+    artifacts = _allocate_artifacts(pcap.filename, None)
+    name = artifacts.analysis_uuid
     rita_db_name = make_rita_db_name(name)
-    upload_path = UPLOADS_DIR / f"{name}.pcap"
-    output_dir = OUTPUTS_DIR / name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    upload_path = artifacts.input_path
+    output_dir = artifacts.zeek_dir
 
     with upload_path.open("wb") as file_obj:
         shutil.copyfileobj(pcap.file, file_obj)
@@ -621,8 +938,9 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         csv_text = _collect_zeek_logs(output_dir)
         print(f"RITA: falling back to raw Zeek logs ({len(csv_text)} chars)")
 
-    csv_path = OUTPUTS_DIR / f"{name}.csv"
-    csv_path.write_text(csv_text, encoding="utf-8")
+    csv_path = artifacts.rita_dir / "view.csv"
+    if rita_ok:
+        csv_path.write_text(csv_text, encoding="utf-8")
 
     # The current model is trained for HTTP/HTTPS, so DNS and other traffic
     # stays in the RITA/RAG path instead of being sent to the LSTM.
@@ -698,11 +1016,13 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         rag_context=rag_context,
     )
 
-    return AnalyzeResponse(
+    response = AnalyzeResponse(
         name=name,
-        csv_path=str(csv_path),
+        csv_path="",
         analysis_markdown=analysis_markdown,
     )
+    _cleanup_guest_artifacts(artifacts)
+    return response
 
 
 @app.post("/analyze/stream")
@@ -730,32 +1050,42 @@ async def analyze_pcap_stream(
 
     def stream():
         record_id: int | None = None
-        upload_path: Path | None = None
-        output_dir: Path | None = None
-        csv_path: Path | None = None
+        artifacts: AnalysisArtifacts | None = None
         try:
             _raise_if_cancelled(job)
-            ensure_dirs()
-
-            name = uuid.uuid4().hex
+            artifacts = _allocate_artifacts(pcap.filename, user)
+            name = artifacts.analysis_uuid
             rita_db_name = make_rita_db_name(name)
-            upload_path = UPLOADS_DIR / f"{name}.pcap"
-            output_dir = OUTPUTS_DIR / name
-            output_dir.mkdir(parents=True, exist_ok=True)
+            upload_path = artifacts.input_path
+            output_dir = artifacts.zeek_dir
 
             _save_uploaded_pcap(pcap, upload_path, job)
+            sha256 = _file_sha256(upload_path)
+            file_size = upload_path.stat().st_size
+            _write_manifest(
+                artifacts,
+                status="processing",
+                original_filename=pcap.filename or "upload.pcap",
+                user=user,
+                rita_db_name=rita_db_name,
+                model_config=model_config,
+                sha256=sha256,
+                file_size=file_size,
+            )
+            _append_runtime_log(artifacts, "Upload saved; analysis started")
             if user:
                 record_id = create_analysis_record(
                     user_id=user.id,
                     original_filename=pcap.filename or "upload.pcap",
-                    storage_path=str(upload_path),
-                    sha256=_file_sha256(upload_path),
-                    file_size=upload_path.stat().st_size,
+                    storage_path=str(artifacts.root),
+                    sha256=sha256,
+                    file_size=file_size,
                     model_id=model_config.key,
                 )
 
             yield sse_event("step", "zeek")
             run_zeek(str(upload_path), output_dir, job=job)
+            _append_runtime_log(artifacts, "Zeek completed")
             _raise_if_cancelled(job)
 
             zeek_logs = list(output_dir.glob("*.log"))
@@ -766,6 +1096,7 @@ async def analyze_pcap_stream(
 
             yield sse_event("step", "rita")
             rita_ok = False
+            rita_imported = False
             csv_text = ""
 
             try:
@@ -775,6 +1106,7 @@ async def analyze_pcap_stream(
                     timeout=600,
                     job=job,
                 )
+                rita_imported = True
                 print("RITA: import OK")
             except HTTPException as exc:
                 print(f"RITA: import failed - {exc.detail}")
@@ -798,12 +1130,20 @@ async def analyze_pcap_stream(
                 csv_text = _collect_zeek_logs(output_dir)
                 print(f"RITA: falling back to raw Zeek logs ({len(csv_text)} chars)")
 
-            csv_path = OUTPUTS_DIR / f"{name}.csv"
-            csv_path.write_text(csv_text, encoding="utf-8")
+            if rita_ok:
+                (artifacts.rita_dir / "view.csv").write_text(csv_text, encoding="utf-8")
+                _append_runtime_log(artifacts, "RITA view exported")
+            else:
+                _append_runtime_log(artifacts, "RITA unavailable; AI analysis will use Zeek logs")
+            _write_json(
+                artifacts.rita_dir / "metadata.json",
+                {"available": rita_ok, "imported": rita_imported, "database": rita_db_name},
+            )
 
             yield sse_event("step", "lstm")
             _raise_if_cancelled(job)
             lstm_results = None
+            lstm_csv_text = ""
             if _LSTM_AVAILABLE:
                 try:
                     from app.pcap_lstm_feature_extractor import export_lstm_features_from_pcap
@@ -812,6 +1152,9 @@ async def analyze_pcap_stream(
                     lstm_csv_text = export_lstm_features_from_pcap(upload_path)
 
                     if lstm_csv_text:
+                        (artifacts.lstm_dir / "features.csv").write_text(
+                            lstm_csv_text, encoding="utf-8"
+                        )
                         print("LSTM: feature extraction complete, running beacon detection...")
                         lstm_results = predict_beacons(lstm_csv_text)
                         _raise_if_cancelled(job)
@@ -824,10 +1167,24 @@ async def analyze_pcap_stream(
                     import traceback
 
                     traceback.print_exc()
+            _write_json(
+                artifacts.lstm_dir / "result.json",
+                lstm_results
+                or {
+                    "status": "skipped_or_failed",
+                    "reason": "No HTTP/HTTPS packets, unavailable dependency, or prediction failure",
+                },
+            )
+            _append_runtime_log(
+                artifacts,
+                "LSTM completed" if lstm_results is not None else "LSTM skipped or failed",
+            )
 
             yield sse_event("step", "rag")
             _raise_if_cancelled(job)
             rag_context = None
+            merged_features: list[dict] = []
+            rag_result: dict | None = None
             if not _RAG_AVAILABLE:
                 print(
                     "RAG: skipped (dependencies not installed: chromadb or sentence-transformers)"
@@ -848,8 +1205,15 @@ async def analyze_pcap_stream(
                     ):
                         from app.threat_feature_merger import merge_threat_features
 
+                        rita_evidence = {}
+                        if rita_imported:
+                            try:
+                                from app.rita_feature_exporter import export_rita_connection_evidence
+                                rita_evidence = export_rita_connection_evidence(rita_db_name)
+                            except Exception as exc:
+                                print(f"RITA: detailed mixtape evidence unavailable - {exc}")
                         print("RAG: merging RITA and LSTM detection results...")
-                        merged_features = merge_threat_features(rita_features, lstm_results)
+                        merged_features = merge_threat_features(rita_features, lstm_results, rita_evidence)
 
                         if not merged_features:
                             print("RAG: no threats found after merging, skipping attribution")
@@ -891,6 +1255,17 @@ async def analyze_pcap_stream(
                     import traceback
 
                     traceback.print_exc()
+            _write_json(artifacts.merged_dir / "threats.json", merged_features)
+            _write_json(
+                artifacts.rag_dir / "result.json",
+                rag_result or {"status": "skipped_or_no_candidates"},
+            )
+            if rag_context:
+                (artifacts.rag_dir / "context.md").write_text(rag_context, encoding="utf-8")
+            _append_runtime_log(
+                artifacts,
+                "RAG completed" if rag_result is not None else "RAG skipped or no candidates",
+            )
 
             yield sse_event("step", "ai")
             _raise_if_cancelled(job)
@@ -910,22 +1285,52 @@ async def analyze_pcap_stream(
                 )
 
             analysis_markdown = "".join(chunks)
+            report_path = artifacts.report_dir / "analysis.md"
+            report_path.write_text(analysis_markdown, encoding="utf-8")
+            dashboard = {
+                "schema_version": ARTIFACT_SCHEMA_VERSION,
+                "analysis_uuid": name,
+                "display_name": artifacts.display_name,
+                "engine_status": {
+                    "rita_available": rita_ok,
+                    "lstm_completed": lstm_results is not None,
+                    "rag_completed": rag_result is not None,
+                },
+                "threats": merged_features,
+                "attribution": rag_result,
+                "lstm": lstm_results or {"status": "skipped_or_failed", "beacons": []},
+                "rita": {
+                    "available": rita_ok,
+                    "database": rita_db_name,
+                    "detailed_evidence_available": bool(rita_imported),
+                },
+            }
+            _write_json(artifacts.visualization_dir / "dashboard.json", dashboard)
+            _write_manifest(
+                artifacts,
+                status="completed",
+                original_filename=pcap.filename or "upload.pcap",
+                user=user,
+                rita_db_name=rita_db_name,
+                model_config=model_config,
+                sha256=sha256,
+                file_size=file_size,
+            )
+            _append_runtime_log(artifacts, "AI report and visualization data saved")
             if record_id:
                 finish_analysis_record(
                     record_id,
                     status="completed",
-                    result_json={
-                        "rita_available": rita_ok,
-                        "lstm_completed": lstm_results is not None,
-                        "rag_completed": rag_context is not None,
-                    },
+                    result_json=dashboard,
                     report_markdown=analysis_markdown,
+                    report_path=str(report_path),
                 )
             payload = json.dumps(
                 {
                     "name": name,
-                    "csv_path": str(csv_path),
+                    "display_name": artifacts.display_name,
                     "analysis_markdown": analysis_markdown,
+                    "visualization": dashboard,
                 },
                 ensure_ascii=False,
             )
@@ -933,18 +1338,27 @@ async def analyze_pcap_stream(
         except AnalysisCancelled:
             if record_id:
                 finish_analysis_record(record_id, status="cancelled")
+            if artifacts:
+                _set_manifest_status(artifacts, "cancelled")
+                _append_runtime_log(artifacts, "Analysis cancelled")
             yield sse_event("cancelled", json.dumps({"analysis_id": analysis_id}))
         except HTTPException as exc:
             if record_id:
                 finish_analysis_record(record_id, status="failed")
+            if artifacts:
+                _set_manifest_status(artifacts, "failed", exc.detail)
+                _append_runtime_log(artifacts, f"Analysis failed: {exc.detail}")
             yield sse_event("error", exc.detail)
         except Exception:
             if record_id:
                 finish_analysis_record(record_id, status="failed")
+            if artifacts:
+                _set_manifest_status(artifacts, "failed", "Unexpected analysis error")
+                _append_runtime_log(artifacts, "Analysis failed with an unexpected error")
             yield sse_event("error", "分析任务执行失败，请稍后重试")
         finally:
             if not user:
-                _cleanup_guest_artifacts(upload_path, output_dir, csv_path)
+                _cleanup_guest_artifacts(artifacts)
             with ACTIVE_ANALYSES_LOCK:
                 ACTIVE_ANALYSES.pop(analysis_id, None)
 
