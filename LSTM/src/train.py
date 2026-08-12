@@ -142,7 +142,7 @@ def finalize_existing_runs() -> dict:
         "feature_cols": FEATURE_COLS, "seq_length": SEQ_LENGTH, "group_cols": GROUP_COLS,
         "sort_col": SORT_COL, "input_shape": [SEQ_LENGTH, len(FEATURE_COLS)],
         "labels": {"0": "benign", "1": "c2"}, "scope": "all_tcp_connection_beacon",
-        "threshold": selected["validation_windows"]["threshold"], "selected_seed": selected["seed"],
+        "selected_seed": selected["seed"],
         "selection_policy": report["selection_policy"],
     }, indent=2), encoding="utf-8")
     print(f"Finalized validation-selected seed={selected['seed']}; test-window recall={selected['test_windows']['recall']:.4f}")
@@ -252,7 +252,7 @@ def train(seeds: tuple[int, ...] = RUN_SEEDS) -> dict:
         "feature_cols": FEATURE_COLS, "seq_length": SEQ_LENGTH, "group_cols": GROUP_COLS,
         "sort_col": SORT_COL, "input_shape": [SEQ_LENGTH, len(FEATURE_COLS)],
         "labels": {"0": "benign", "1": "c2"}, "scope": "all_tcp_connection_beacon",
-        "threshold": selected["validation_windows"]["threshold"], "selected_seed": selected["seed"],
+        "selected_seed": selected["seed"],
         "selection_policy": report["selection_policy"],
     }
     METADATA_PATH.write_text(json.dumps(metadata, indent=2), encoding="utf-8")

@@ -308,8 +308,7 @@ def _build_sample_rag_context(
     """
     results: list[dict] = []
     lines = [
-        f"本样本共检出 **{len(merged_features)}** 条唯一可疑连接。",
-        "以下编号是该样本内的连接编号；每条连接均已独立完成 RAG 检索。",
+        "以下编号为待核查连接；每条连接均已独立完成 RAG 检索。",
     ]
 
     for index, feature in enumerate(merged_features, 1):
@@ -387,6 +386,15 @@ def _rag_evidence_appendix(rag_context: str | None) -> str:
     return f"\n\n---\n\n## 附录：系统生成的全量可疑连接与 RAG 检索证据\n\n{rag_context}"
 
 
+def _lstm_evidence_appendix(lstm_results: dict | None) -> str:
+    """Return a deterministic LSTM section for every completed report.
+
+    The LLM receives the same information in its prompt, but this appendix makes
+    the LSTM outcome auditable even when the generated narrative omits it.
+    """
+    return f"\n\n---\n\n{_fmt_lstm(lstm_results)}"
+
+
 def _build_ai_request(
     csv_text: str,
     lstm_results: dict | None = None,
@@ -415,6 +423,8 @@ def _build_ai_request(
         "2. **主要威胁特征** - 说明可疑 C2 行为、Beacon 特征、异常现象\n"
         "3. **风险评估** - 说明严重性、潜在影响与业务风险\n"
         "4. **处置建议** - 给出面向 SOC 团队的具体下一步措施\n\n"
+        "总体发现、数量和结论如需概括，只能集中写在开头的“执行摘要”；"
+        "后续章节仅分析证据与影响，不要重复使用“共检出 X 条可疑连接”之类的汇总表述。\n\n"
     )
     
     if rag_context:
@@ -429,16 +439,18 @@ def _build_ai_request(
             "不得将语义检索结果表述为已确认归因。\n"
         )
 
-    if lstm_results and lstm_results.get("total_flagged", 0) > 0:
-        lstm_markdown = _fmt_lstm(lstm_results)
-        prompt += f"\nLSTM 检测结果如下：\n{lstm_markdown}\n"
-        print("=" * 80)
-        print("LSTM Beacon Detection Results (inserted into LLM prompt):")
-        print("=" * 80)
-        print(lstm_markdown)
-        print("=" * 80)
-    elif lstm_results and lstm_results.get("total_flagged", 0) == 0:
-        print("LSTM: analyzed but found no beacons")
+    lstm_markdown = _fmt_lstm(lstm_results)
+    prompt += (
+        "\n以下是系统生成的 LSTM 时序检测结果。无论其是否命中 C2，"
+        "请在报告的“主要威胁特征”或“风险评估”中明确说明该检测结论；"
+        "未命中不应表述为绝对安全：\n"
+        f"{lstm_markdown}\n"
+    )
+    print("=" * 80)
+    print("LSTM result (inserted into LLM prompt):")
+    print("=" * 80)
+    print(lstm_markdown)
+    print("=" * 80)
 
     prompt += f"\n原始分析输入如下：\n{csv_text}"
 
@@ -484,7 +496,7 @@ def generate_ai_analysis(
     data = response.json()
     try:
         report = data["choices"][0]["message"]["content"].strip()
-        return report + _rag_evidence_appendix(rag_context)
+        return report + _lstm_evidence_appendix(lstm_results) + _rag_evidence_appendix(rag_context)
     except (KeyError, IndexError, AttributeError) as exc:
         raise HTTPException(
             status_code=502, detail="Unexpected SiliconFlow response format"
@@ -1003,6 +1015,7 @@ async def analyze_pcap_stream(
                 )
 
             analysis_markdown = "".join(chunks)
+            analysis_markdown += _lstm_evidence_appendix(lstm_results)
             analysis_markdown += _rag_evidence_appendix(rag_context)
             if record_id:
                 finish_analysis_record(

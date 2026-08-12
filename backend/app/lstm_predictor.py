@@ -14,6 +14,7 @@ import numpy as np
 _keras_model = None
 _scaler = None
 _metadata = None
+_decision_threshold = None
 _load_attempted = False
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
@@ -24,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def _load_artifacts() -> bool:
-    """Lazy-load Keras model, scaler, and metadata."""
-    global _keras_model, _scaler, _metadata, _load_attempted
+    """Lazy-load and cross-check the complete deployed model artifact set."""
+    global _keras_model, _scaler, _metadata, _decision_threshold, _load_attempted
 
     if _load_attempted:
         return _keras_model is not None
@@ -40,8 +41,9 @@ def _load_artifacts() -> bool:
     model_path = MODELS_DIR / "beacon_lstm_model.keras"
     scaler_path = MODELS_DIR / "scaler.pkl"
     meta_path = MODELS_DIR / "model_metadata.json"
+    threshold_path = MODELS_DIR / "decision_threshold.json"
 
-    if not model_path.exists() or not scaler_path.exists() or not meta_path.exists():
+    if not all(path.exists() for path in (model_path, scaler_path, meta_path, threshold_path)):
         logger.warning("Missing LSTM artifact(s) under %s; LSTM detection disabled", MODELS_DIR)
         return False
 
@@ -68,7 +70,31 @@ def _load_artifacts() -> bool:
         _scaler = None
         return False
 
-    logger.info("LSTM artifacts loaded successfully")
+    try:
+        threshold_config = json.loads(threshold_path.read_text(encoding="utf-8"))
+        _decision_threshold = float(threshold_config["threshold"])
+        if not 0.0 <= _decision_threshold <= 1.0:
+            raise ValueError("threshold must be between 0 and 1")
+
+        feature_cols = _metadata["feature_cols"]
+        seq_length = int(_metadata["seq_length"])
+        expected_shape = [seq_length, len(feature_cols)]
+        if _metadata.get("input_shape") != expected_shape:
+            raise ValueError(
+                f"metadata input_shape {_metadata.get('input_shape')} does not match {expected_shape}"
+            )
+        if getattr(_scaler, "n_features_in_", len(feature_cols)) != len(feature_cols):
+            raise ValueError("scaler feature count does not match model metadata")
+
+        model_shape = tuple(_keras_model.input_shape)
+        if len(model_shape) != 3 or tuple(model_shape[1:]) != tuple(expected_shape):
+            raise ValueError(f"model input shape {model_shape} does not match {expected_shape}")
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        logger.warning("Invalid or mismatched LSTM artifact set: %s", exc)
+        _keras_model = _scaler = _metadata = _decision_threshold = None
+        return False
+
+    logger.info("LSTM artifacts loaded successfully (threshold=%s)", _decision_threshold)
     return True
 
 
@@ -218,11 +244,10 @@ def _deduplicate_beacons(beacons: list[dict]) -> list[dict]:
 
 
 def _default_threshold() -> float:
-    """Use the validation-selected threshold embedded in the model metadata."""
-    try:
-        return float(_metadata.get("threshold", 0.5))
-    except (AttributeError, TypeError, ValueError):
-        return 0.5
+    """Return the deployment threshold from decision_threshold.json only."""
+    if _decision_threshold is None:
+        raise RuntimeError("LSTM decision threshold was not loaded")
+    return _decision_threshold
 
 
 def predict_beacons(csv_text: str, threshold: float | None = None) -> Optional[dict]:
@@ -292,15 +317,34 @@ def predict_beacons(csv_text: str, threshold: float | None = None) -> Optional[d
         "beacons": beacons,
         "total_connections": unique_connections,
         "total_flagged": total_flagged,
+        "threshold": float(threshold),
         "summary_text": summary,
     }
 
 
-def format_for_prompt(lstm_results: dict) -> str:
+def format_for_prompt(lstm_results: dict | None) -> str:
+    """Format an auditable LSTM status section for the AI report.
+
+    This deliberately reports both positive and negative detection outcomes.
+    ``None`` means the LSTM could not produce a valid result; it must never be
+    described as a benign verdict.
+    """
+    if lstm_results is None:
+        return "\n".join(
+            [
+                "## LSTM 时序检测结果",
+                "",
+                "- **检测状态**：未完成",
+                "- **说明**：未能构造可用的 LSTM 输入序列，或模型/特征提取不可用；这不等同于流量为良性。",
+            ]
+        )
+
+    threshold = float(lstm_results.get("threshold", 0.0))
     lines = [
-        "## LSTM Beacon Detection Results",
+        "## LSTM 时序检测结果",
         "",
-        lstm_results["summary_text"],
+        "- **检测状态**：完成",
+        f"- **告警阈值**：{threshold:.6f}",
     ]
 
     beacons = lstm_results.get("beacons", [])
@@ -323,9 +367,15 @@ def format_for_prompt(lstm_results: dict) -> str:
         lines.extend(
             [
                 "",
-                "Please prioritize these flagged connections in your analysis. "
-                "Consider whether they exhibit beaconing behavior and recommend "
-                "specific investigation steps for high-confidence matches.",
+                "以上通信组达到 LSTM C2 Beacon 告警阈值，应结合 RITA、Zeek 和资产上下文优先核查。",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "**判定**：已完成 LSTM 时序分析，未发现达到告警阈值的 C2 Beacon 通信组。"
+                "该结果表示“本次模型未命中”，不构成对流量绝对安全或无其他攻击行为的证明。",
             ]
         )
 

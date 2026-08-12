@@ -1,24 +1,48 @@
 {
   "feature_cols": [
-    "iat_oresp_total",
-    "iat_oresp_min",
-    "iat_oresp_max",
-    "iat_oresp_mean",
-    "iat_oresp_stddev",
-    "iat_oresp_nf_0",
-    "iat_oresp_nf_1",
-    "iat_oresp_nf_2",
-    "iat_oresp_nf_3",
-    "iat_oresp_nf_4",
-    "iat_oresp_nf_5",
-    "iat_oresp_nf_6",
-    "iat_oresp_nf_7",
-    "iat_oresp_nf_8",
-    "iat_oresp_nf_9"
+    "flow_gap",
+    "log_flow_gap",
+    "gap_rolling_mean",
+    "gap_rolling_std",
+    "gap_rolling_cv",
+    "gap_rolling_median",
+    "gap_rolling_iqr",
+    "duration",
+    "orig_packets",
+    "resp_packets",
+    "orig_bytes",
+    "resp_bytes",
+    "packet_ratio",
+    "byte_ratio",
+    "packet_iat_min",
+    "packet_iat_max",
+    "packet_iat_mean",
+    "packet_iat_stddev",
+    "packet_iat_0",
+    "packet_iat_1",
+    "packet_iat_2",
+    "packet_iat_3",
+    "packet_iat_4",
+    "direction_confidence"
   ],
   "seq_length": 10,
+  "group_cols": [
+    "source_file",
+    "src_ip",
+    "dst_ip",
+    "dst_port",
+    "ip_protocol"
+  ],
+  "sort_col": "start_time",
   "input_shape": [
     10,
-    15
-  ]
+    24
+  ],
+  "labels": {
+    "0": "benign",
+    "1": "c2"
+  },
+  "scope": "all_tcp_connection_beacon",
+  "selected_seed": 2029,
+  "selection_policy": "validation_only: constraints(recall>=0.98,fpr<=0.05), then recall, lower FPR, F1, lower val_loss"
 }

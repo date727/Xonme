@@ -43,7 +43,6 @@
     "1": "c2"
   },
   "scope": "all_tcp_connection_beacon",
-  "threshold": 0.9998542070388794,
   "selected_seed": 2029,
   "selection_policy": "validation_only: constraints(recall>=0.98,fpr<=0.05), then recall, lower FPR, F1, lower val_loss"
 }
