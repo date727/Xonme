@@ -1369,8 +1369,13 @@ const loadSession = async () => {
     currentUser = null;
   }
   sessionResolved = true;
+  if (!currentUser) {
+    window.location.replace("login.html");
+    return;
+  }
+  document.documentElement.classList.remove("auth-pending");
   renderAccount();
-  if (currentUser) void loadAnalysisHistory();
+  void loadAnalysisHistory();
   const routeState = getHashState();
   if (currentUser && routeState.tab === "capability") {
     void loadAnalysisFromRoute(routeState.params);
