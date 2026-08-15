@@ -1,4 +1,4 @@
-"""Create C2Sherlock's application tables in the configured MySQL database.
+"""Create C2Sherlock's application tables in the configured database.
 
 Run from backend/ after configuring .env:
     python scripts/init_database.py

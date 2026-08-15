@@ -1167,7 +1167,7 @@ const renderAnalysisHistory = (analyses, { page = 1, total = 0, totalPages = 1, 
     renderHistoryPagination({ page, total, totalPages });
     return;
   }
-  historyEmpty.textContent = "暂无已保存的分析任务。完成一次登录后的 PCAP 分析后，结果会自动出现在这里。";
+  historyEmpty.textContent = "暂无历史分析任务，请前往检测中心进行检测。";
   analysisHistoryBody.replaceChildren(...analyses.map((analysis, index) => {
     const row = document.createElement("tr");
     const conclusion = analysis.conclusion || { kind: "failed", label: "未知" };

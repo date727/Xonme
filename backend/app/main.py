@@ -209,6 +209,14 @@ def _safe_path_component(value: str, fallback: str) -> str:
     return cleaned.strip("._-")[:80] or fallback
 
 
+def _user_runs_root(user_id: int) -> Path:
+    """Return the stable artifact directory for an authenticated user ID."""
+
+    if user_id <= 0:
+        raise ValueError("A user ID must be a positive integer")
+    return USER_RUNS_DIR / str(user_id)
+
+
 def _allocate_artifacts(original_filename: str | None, user: User | None) -> AnalysisArtifacts:
     """Create the task directory before processing so every artifact has one home."""
 
@@ -222,7 +230,7 @@ def _allocate_artifacts(original_filename: str | None, user: User | None) -> Ana
         if user:
             timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
             display_name = f"{timestamp}_{safe_stem}_{analysis_uuid[:8]}"
-            root = USER_RUNS_DIR / _safe_path_component(user.username, "user") / display_name
+            root = _user_runs_root(user.id) / display_name
         else:
             display_name = analysis_uuid
             root = GUEST_JOBS_DIR / analysis_uuid
@@ -284,6 +292,7 @@ def _write_manifest(
             "analysis_uuid": artifacts.analysis_uuid,
             "display_name": artifacts.display_name,
             "owner_type": "guest" if artifacts.is_guest else "user",
+            "user_id": user.id if user else None,
             "username": user.username if user else None,
             "original_filename": original_filename,
             "sha256": sha256,
@@ -1012,11 +1021,11 @@ def _owned_task_root(record: dict, user: User) -> Path:
     """Resolve a saved task directory and reject paths outside this user's area."""
 
     root = Path(record["storage_path"]).resolve()
-    owner_root = (USER_RUNS_DIR / _safe_path_component(user.username, "user")).resolve()
+    owner_root = _user_runs_root(user.id).resolve()
     try:
         root.relative_to(owner_root)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail="任务使用的是不受支持的旧存储路径") from exc
+        raise HTTPException(status_code=409, detail="任务存储路径不属于当前用户区域") from exc
     if root.parent != owner_root:
         raise HTTPException(status_code=409, detail="任务目录结构无效，无法执行该操作")
     return root

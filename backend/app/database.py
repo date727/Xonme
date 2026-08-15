@@ -1,4 +1,4 @@
-"""MySQL persistence for C2Sherlock application data.
+"""SQLAlchemy persistence for C2Sherlock application data.
 
 PCAP files and generated reports stay on disk (or an object store later).  This
 module stores only their metadata, ownership and structured analysis result.
@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, create_engine, func, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 
@@ -19,21 +21,32 @@ def get_database_url() -> str | None:
     return os.getenv("DATABASE_URL") or None
 
 
+def local_database_time() -> datetime:
+    """Return the server's current local time as a database-safe datetime."""
+
+    return datetime.now().astimezone().replace(tzinfo=None)
+
+
 class Base(DeclarativeBase):
     pass
+
+
+# SQLite auto-increments only an ``INTEGER PRIMARY KEY`` column. Keep BIGINT
+# identifiers for MySQL while emitting INTEGER for SQLite databases.
+PRIMARY_KEY_TYPE = BigInteger().with_variant(Integer(), "sqlite")
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, index=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=local_database_time)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=local_database_time, onupdate=local_database_time
     )
 
     analyses: Mapped[list["AnalysisRecord"]] = relationship(
@@ -44,9 +57,9 @@ class User(Base):
 class AnalysisRecord(Base):
     __tablename__ = "analysis_records"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        PRIMARY_KEY_TYPE, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
@@ -57,7 +70,7 @@ class AnalysisRecord(Base):
     result_json: Mapped[dict | None] = mapped_column(JSON)
     report_markdown: Mapped[str | None] = mapped_column(Text)
     report_path: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=local_database_time)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     user: Mapped[User] = relationship(back_populates="analyses")
@@ -67,6 +80,14 @@ def create_database_engine():
     database_url = get_database_url()
     if not database_url:
         raise RuntimeError("DATABASE_URL is not configured. Copy backend/.env.example to backend/.env first.")
+    url = make_url(database_url)
+    if url.drivername.startswith("sqlite"):
+        if url.database and url.database != ":memory:":
+            Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        return create_engine(
+            database_url,
+            connect_args={"check_same_thread": False},
+        )
     return create_engine(database_url, pool_pre_ping=True)
 
 
@@ -137,7 +158,7 @@ def finish_analysis_record(
         record.result_json = result_json
         record.report_markdown = report_markdown
         record.report_path = report_path
-        record.completed_at = datetime.utcnow()
+        record.completed_at = local_database_time()
         session.commit()
 
 
