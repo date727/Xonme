@@ -7,6 +7,10 @@ backend/uploads/
 backend/outputs/
 backend/data/analysis_runs/
 backend/data/guest_jobs/
+# Local SQLite database and its transient journal files.
+backend/data/*.sqlite3
+backend/data/*.sqlite3-shm
+backend/data/*.sqlite3-wal
 backend/chroma_db
 backend/local_models
 attack-stix-data
