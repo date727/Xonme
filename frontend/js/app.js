@@ -220,7 +220,19 @@ const clearSelectedFile = () => {
 
 const getReportBaseName = () => {
   const sourceName = selectedFile?.name ? selectedFile.name.replace(/\.[^.]+$/, "") : "c2sherlock-report";
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  // toISOString() is always UTC, which makes downloaded filenames appear
+  // eight hours early for users in China.  A report filename should reflect
+  // the time displayed in the user's browser instead.
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  const stamp = [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join("-");
   return `${sourceName}-${stamp}`;
 };
 
