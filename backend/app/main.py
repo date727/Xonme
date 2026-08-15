@@ -49,6 +49,7 @@ from app.auth import (
     initialise_session_secret,
     router as auth_router,
 )
+from app.report_context import build_report_context, format_report_context
 
 # LSTM beacon detection - gracefully degrades if dependencies are missing
 try:
@@ -776,6 +777,7 @@ def _build_ai_request(
     model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    report_context: dict | None = None,
     stream: bool = False,
 ) -> tuple[str, dict[str, str], dict]:
     url = get_chat_completions_url(model_config)
@@ -784,39 +786,33 @@ def _build_ai_request(
         "Content-Type": "application/json",
     }
 
-    source = "RITA CSV report" if rita_ok else "Zeek network log data"
     system_prompt = (
-        "你是一名资深网络威胁分析师。"
-        "请始终使用中文回答，并输出专业的 Markdown 报告。"
+        "你是一名资深网络威胁分析师。请始终使用中文回答，并输出专业、"
+        "证据可审计的 Markdown 报告。后端提供的‘报告简报’是唯一可作为"
+        "事实依据的内容；不得编造 IOC、日志字段、攻击组织或 ATT&CK 技术。"
+    )
+    brief = format_report_context(report_context) if report_context else (
+        "## 后端已核验的报告简报\n"
+        "- 本次未提供结构化报告简报；仅可根据下方检测输入谨慎说明。"
     )
     prompt = (
-        "请输出一份中文 Markdown 报告，且第一行标题必须严格为："
+        "请仅根据以下报告简报生成报告。第一行标题必须严格为："
         "# C2Sherlock AI分析报告\n\n"
-        f"请分析以下{source}，并按下面结构组织内容：\n"
-        "1. **执行摘要** - 用 2-3 句话概括核心发现\n"
-        "2. **主要威胁特征** - 说明可疑 C2 行为、Beacon 特征、异常现象\n"
-        "3. **风险评估** - 说明严重性、潜在影响与业务风险\n"
-        "4. **处置建议** - 给出面向 SOC 团队的具体下一步措施\n\n"
+        "报告必须严格包含以下五个二级标题，且不得新增同级章节：\n"
+        "## 1. 执行摘要\n"
+        "## 2. 主要威胁特征\n"
+        "## 3. 风险评估\n"
+        "## 4. 处置建议\n"
+        "## 5. 威胁归因\n\n"
+        "写作硬规则：\n"
+        "- ‘执行摘要’的第一行必须原样写出报告简报中的‘综合判定’。\n"
+        "- 不得用‘可能、疑似、待确认’替换该综合判定；可以在后文说明证据边界。\n"
+        "- LSTM 未形成序列只能说明时序模型不适用，不能当作风险证据或良性证明。\n"
+        "- RITA 的 :: 只可视为聚合字段缺失，不能描述为真实目的地址异常。\n"
+        "- 若简报说明归因不适用，第 5 节必须写‘归因结论：不适用’，不得虚构 APT 组织。\n"
+        "- 若包含 RAG 线索，组织名称仅能表述为关联候选或辅助狩猎线索。\n\n"
+        f"{brief}\n"
     )
-    
-    if rag_context:
-        prompt += (
-            "\n以下是 ATT&CK 溯源上下文，请用于丰富分析：\n"
-            f"{rag_context}\n\n"
-            "请在报告中新增第 5 节“威胁归因”，至少包括：\n"
-            "- 最可能的 APT 组织或组织集合\n"
-            "- 对应的 MITRE ATT&CK 技术编号\n"
-            "- 你的置信度与需要保留的 caveat\n"
-        )
-
-    lstm_markdown = _fmt_lstm(lstm_results)
-    prompt += (
-        "\n以下是系统生成的 LSTM 时序检测结果。无论是否命中 C2，"
-        "请在报告中明确说明该检测结论；未命中不代表绝对安全：\n"
-        f"{lstm_markdown}\n"
-    )
-
-    prompt += f"\n原始分析输入如下：\n{csv_text}"
 
     payload = {
         "model": model_config.model,
@@ -841,6 +837,7 @@ def generate_ai_analysis(
     model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    report_context: dict | None = None,
 ) -> str:
     url, headers, payload = _build_ai_request(
         csv_text,
@@ -848,6 +845,7 @@ def generate_ai_analysis(
         model_config=model_config,
         rita_ok=rita_ok,
         rag_context=rag_context,
+        report_context=report_context,
         stream=False,
     )
 
@@ -876,6 +874,7 @@ def stream_ai_analysis(
     model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    report_context: dict | None = None,
     job: AnalysisJob | None = None,
 ):
     _raise_if_cancelled(job)
@@ -886,6 +885,7 @@ def stream_ai_analysis(
             model_config=model_config,
             rita_ok=rita_ok,
             rag_context=rag_context,
+            report_context=report_context,
             stream=False,
         )
         response_payload = {
@@ -933,6 +933,7 @@ def stream_ai_analysis(
         model_config=model_config,
         rita_ok=rita_ok,
         rag_context=rag_context,
+        report_context=report_context,
         stream=True,
     )
 
@@ -1288,12 +1289,24 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
     except Exception as exc:
         print(f"RAG: failed - {exc}")
 
+    report_context = build_report_context(
+        csv_text=csv_text,
+        output_dir=output_dir,
+        sample_sha256=_file_sha256(upload_path),
+        sample_name=pcap.filename,
+        threats=merged_features,
+        lstm_results=lstm_results,
+        rita_ok=rita_ok,
+        rag_context=rag_context,
+    )
+
     analysis_markdown = generate_ai_analysis(
         csv_text,
         lstm_results=lstm_results,
         model_config=get_model_config(None),
         rita_ok=rita_ok,
         rag_context=rag_context,
+        report_context=report_context,
     )
 
     response = AnalyzeResponse(
@@ -1525,6 +1538,17 @@ async def analyze_pcap_stream(
                 "RAG completed" if rag_result is not None else "RAG skipped or no candidates",
             )
 
+            report_context = build_report_context(
+                csv_text=csv_text,
+                output_dir=output_dir,
+                sample_sha256=sha256,
+                sample_name=pcap.filename,
+                threats=merged_features,
+                lstm_results=lstm_results,
+                rita_ok=rita_ok,
+                rag_context=rag_context,
+            )
+
             yield sse_event("step", "ai")
             _raise_if_cancelled(job)
             chunks: list[str] = []
@@ -1534,6 +1558,7 @@ async def analyze_pcap_stream(
                 model_config=model_config,
                 rita_ok=rita_ok,
                 rag_context=rag_context,
+                report_context=report_context,
                 job=job,
             ):
                 chunks.append(delta)
@@ -1559,6 +1584,7 @@ async def analyze_pcap_stream(
                 "threats": merged_features,
                 "engine_results": engine_results,
                 "attribution": rag_result,
+                "report_decision": report_context["decision"],
                 "lstm": lstm_results or {"status": "skipped_or_failed", "beacons": []},
                 "rita": {
                     "available": rita_ok,
