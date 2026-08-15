@@ -112,7 +112,7 @@ def _decision(sample_sha256: str | None, threats: list[dict]) -> dict[str, str]:
 def _lstm_finding(lstm_results: dict | None) -> dict[str, str]:
     status = (lstm_results or {}).get("status")
     if status == "insufficient_sequence":
-        return {"state": "not_evaluated", "text": "时序样本不足，未将 LSTM 结果作为本次风险判断依据。"}
+        return {"state": "not_evaluated", "text": "本次同类连接数量未达到时序模型的评估要求，LSTM 未参与本次评估。"}
     if status in {"unavailable", "failed"}:
         return {"state": "not_evaluated", "text": "时序检测本次未形成有效结果，未将其作为风险判断依据。"}
     if lstm_results and lstm_results.get("total_flagged", 0):
@@ -133,6 +133,28 @@ def _techniques(mismatches: list[dict[str, str]], http_records: list[dict[str, s
     if mismatches:
         ids.append("T1036")
     return [{"id": item, **TECHNIQUE_CATALOG[item]} for item in ids]
+
+
+def _rita_risk_label(row: dict[str, str]) -> str:
+    """Give readers a stable RITA risk conclusion even when its CSV Severity is blank."""
+
+    raw_severity = _value(row.get("Severity"), "").lower()
+    names = {"high": "高风险", "medium": "中风险", "low": "低风险", "base": "基础风险"}
+    if raw_severity in names:
+        return names[raw_severity]
+    try:
+        score = float(row.get("Beacon Score") or 0)
+    except (TypeError, ValueError):
+        return "未形成可用风险判定"
+    # RITA v5 commonly exports a 0-1 score; older versions use 0-100.
+    comparable_score = score * 100 if score <= 1.5 else score
+    if comparable_score >= 90:
+        return "中风险"
+    if comparable_score >= 70:
+        return "低风险"
+    if comparable_score >= 50:
+        return "基础风险"
+    return "未达到 Beacon 风险告警阈值"
 
 
 def _attribution(rag_results: list[dict] | None, applicable: bool) -> dict[str, Any]:
@@ -247,7 +269,7 @@ def build_report_context(
         row = rita_records[0]
         rita_summary = (
             f"RITA Beacon Score 为 {_score_text(row.get('Beacon Score'))}，"
-            f"严重度为 `{_value(row.get('Severity'))}`，"
+            f"RITA 风险判定为“{_rita_risk_label(row)}”，"
             f"连接数为 {_value(row.get('Connection Count'))}。"
         )
         if not threats:
@@ -310,6 +332,7 @@ def format_report_context(context: dict[str, Any]) -> str:
         f"- HTTP 请求数：{profile['http_requests']}；TLS 会话数：{profile['tls_sessions']}",
         "检测结果：",
         f"- {context['rita_summary']}",
+        "评估范围说明：",
         f"- {context['lstm']['text']}",
     ]
     for title, items in (("异常证据", context["abnormal_evidence"]), ("正常性证据", context["benign_evidence"])):

@@ -48,7 +48,7 @@ class ReportContextTests(unittest.TestCase):
         }]]
         with patch("app.report_context._read_zeek_tsv", side_effect=logs):
             context = build_report_context(
-                csv_text="Severity,Beacon Score,Connection Count\nlow,0.400,2\n",
+                csv_text="Severity,Beacon Score,Connection Count\n,0.400,2\n",
                 output_dir=Path("."),  # mocked reader never reads this value
                 sample_sha256=SMASHBURGER_SHA,
                 sample_name="smashburger.pcapng",
@@ -61,7 +61,8 @@ class ReportContextTests(unittest.TestCase):
             self.assertEqual(context["decision"]["risk_level"], "低危")
             self.assertEqual(context["attribution"]["status"], "not_applicable")
             self.assertIn("smashburger.com", packet)
-            self.assertIn("未将 LSTM 结果作为本次风险判断依据", packet)
+            self.assertIn("RITA 风险判定为“未达到 Beacon 风险告警阈值”", packet)
+            self.assertIn("LSTM 未参与本次评估", packet)
 
 
 if __name__ == "__main__":
