@@ -6,6 +6,12 @@ const toastCloseButton = document.querySelector("#auth-toast-close");
 const submitButton = form?.querySelector("button[type=submit]");
 const fillDemoAccountButton = document.querySelector("#fill-demo-account");
 const passwordToggles = document.querySelectorAll("[data-password-toggle]");
+const guestModeLink = document.querySelector(".header-actions .outline");
+
+guestModeLink?.addEventListener("click", (event) => {
+  event.preventDefault();
+  window.location.href = "index.html?mode=guest";
+});
 
 const setMessage = (text = "", type = "") => {
   if (!toast || !toastMessage) return;

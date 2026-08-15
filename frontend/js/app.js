@@ -1362,6 +1362,9 @@ const renderAccount = () => {
 };
 
 const loadSession = async () => {
+  // The app defaults to the login page. This query flag is set only by the
+  // explicit visitor-mode links on the login and registration pages.
+  const isGuestMode = new URLSearchParams(window.location.search).get("mode") === "guest";
   try {
     const response = await fetch(`${apiBase}/auth/me`, { credentials: "include" });
     currentUser = response.ok ? await response.json() : null;
@@ -1369,7 +1372,7 @@ const loadSession = async () => {
     currentUser = null;
   }
   sessionResolved = true;
-  if (!currentUser) {
+  if (!currentUser && !isGuestMode) {
     window.location.replace("login.html");
     return;
   }
