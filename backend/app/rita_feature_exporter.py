@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import csv
 import io
+import ipaddress
 import json
+import os
 import subprocess
 from collections.abc import Iterable
 from typing import Any
@@ -73,7 +75,7 @@ def _build_iat_features(ts_intervals: list[float], ts_counts: list[float]) -> di
 
 def export_lstm_feature_csv_from_rita_db(
     database: str,
-    clickhouse_container: str = "rita-clickhouse",
+    clickhouse_container: str | None = None,
 ) -> str:
     """
     从 RITA ClickHouse 数据库导出 LSTM 特征 CSV 文本。
@@ -89,16 +91,26 @@ def export_lstm_feature_csv_from_rita_db(
         "FORMAT JSONEachRow"
     )
 
+    container = clickhouse_container or os.getenv("RITA_CLICKHOUSE_CONTAINER", "rita-clickhouse")
     cmd = [
         "docker",
         "exec",
-        clickhouse_container,
+        container,
         "clickhouse-client",
         "-q",
         query,
     ]
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    # RITA fields can contain raw service/banner bytes.  Strict UTF-8 decoding
+    # previously made one invalid byte discard the complete JSON export.
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
     raw = (proc.stdout or "").strip()
     if not raw:
         return ""
@@ -197,9 +209,25 @@ def _service_parts(value: Any) -> tuple[str, str]:
     return (parts[0] if parts else "", parts[1] if len(parts) > 1 else "")
 
 
+def _canonical_ip(value: Any) -> str:
+    """Use the same text form for IPv4 and ClickHouse IPv4-mapped IPv6.
+
+    RITA's CSV view emits ``192.168.56.5`` while ClickHouse's IPv6 column
+    emits ``::ffff:192.168.56.5`` for that exact host.  These are the same
+    endpoint and must produce the same dashboard evidence key.
+    """
+    raw = str(value or "").strip()
+    try:
+        address = ipaddress.ip_address(raw)
+    except ValueError:
+        return raw
+    mapped_ipv4 = getattr(address, "ipv4_mapped", None)
+    return str(mapped_ipv4 or address)
+
+
 def export_rita_connection_evidence(
     database: str,
-    clickhouse_container: str = "rita-clickhouse",
+    clickhouse_container: str | None = None,
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
     """Return real, version-tolerant RITA mixtape evidence for dashboard use.
 
@@ -209,11 +237,27 @@ def export_rita_connection_evidence(
     """
     if not database.replace("_", "").isalnum():
         raise ValueError("Invalid RITA database name")
-    query = f"SELECT * FROM {database}.threat_mixtape FORMAT JSONEachRow"
+    # Do not use ``SELECT *`` here.  RITA may retain raw, non-UTF-8 banner or
+    # modifier data in unrelated String fields; that must not prevent the
+    # dashboard from receiving its numeric detection evidence.  The selected
+    # names are the RITA v5 threat_mixtape schema verified by this project.
+    query = (
+        "SELECT "
+        "src,dst,fqdn,port_proto_service,count,beacon_score,"
+        "ts_score,ds_score,dur_score,hist_score,"
+        "ts_intervals,ts_interval_counts,ds_sizes,ds_size_counts,"
+        "total_duration,total_bytes,"
+        "long_conn_score,c2_over_dns_score,subdomain_count,"
+        "threat_intel_score "
+        f"FROM {database}.threat_mixtape FORMAT JSONEachRow"
+    )
+    container = clickhouse_container or os.getenv("RITA_CLICKHOUSE_CONTAINER", "rita-clickhouse")
     proc = subprocess.run(
-        ["docker", "exec", clickhouse_container, "clickhouse-client", "-q", query],
+        ["docker", "exec", container, "clickhouse-client", "-q", query],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=True,
     )
     result: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -223,19 +267,28 @@ def export_rita_connection_evidence(
         except json.JSONDecodeError:
             continue
         port, protocol = _service_parts(_first(row, "port_proto_service"))
-        src, dst = str(_first(row, "src", "source", "source_ip") or ""), str(_first(row, "dst", "destination", "destination_ip") or "")
+        src = _canonical_ip(_first(row, "src", "source", "source_ip"))
+        dst = _canonical_ip(_first(row, "dst", "destination", "destination_ip"))
         if not src or not dst:
             continue
         intervals = _to_float_list(_first(row, "ts_intervals") or [])
         interval_counts = _to_float_list(_first(row, "ts_interval_counts") or [])
+        data_sizes = _to_float_list(_first(row, "ds_sizes") or [])
+        data_size_counts = _to_float_list(_first(row, "ds_size_counts") or [])
         result[(src, dst, str(port))] = {
             "protocol": protocol or None,
-            "timestamp_score": _number(_first(row, "timestamp_score", "time_score")),
-            "datasize_score": _number(_first(row, "datasize_score", "data_size_score")),
-            "duration_score": _number(_first(row, "duration_score")),
+            "beacon_score": _number(_first(row, "beacon_score", "score", "beacon")),
+            "destination_host": _first(row, "fqdn", "domain", "hostname") or None,
+            # RITA v5 uses concise column names; preserve older aliases too
+            # so the adapter remains compatible with prior exports.
+            "timestamp_score": _number(_first(row, "ts_score", "timestamp_score", "time_score")),
+            "datasize_score": _number(_first(row, "ds_score", "datasize_score", "data_size_score")),
+            "duration_score": _number(_first(row, "dur_score", "duration_score")),
             "histogram_score": _number(_first(row, "histogram_score", "hist_score")),
             "ts_intervals": intervals or None,
             "ts_interval_counts": interval_counts or None,
+            "ds_sizes": data_sizes or None,
+            "ds_size_counts": data_size_counts or None,
             "connection_count": _number(_first(row, "count", "connection_count")),
             "total_duration": _number(_first(row, "duration", "total_duration")),
             "total_bytes": _number(_first(row, "total_bytes", "bytes")),

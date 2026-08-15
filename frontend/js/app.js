@@ -71,6 +71,9 @@ const caseToast = $("#case-toast");
 const historyEmpty = $("#history-empty");
 const historyTableWrap = $("#history-table-wrap");
 const analysisHistoryBody = $("#analysis-history-body");
+const analysisHistorySearch = $("#analysis-history-search");
+const analysisHistoryKeyword = $("#analysis-history-keyword");
+const analysisHistoryPagination = $("#analysis-history-pagination");
 const dataCenterHistoryBtn = $("#data-center-history-btn");
 
 let selectedFile = null;
@@ -81,6 +84,9 @@ let activeController = null;
 let activeAnalysisId = null;
 let displayedAnalysisId = null;
 let latestVisualization = null;
+const HISTORY_PAGE_SIZE = 10;
+let historyPage = 1;
+let historyKeyword = "";
 
 const setCurrentDataAvailable = (available) => {
   if (!openCurrentDataBtn) return;
@@ -1098,14 +1104,74 @@ const formatAnalysisTime = (value) => {
   return Number.isNaN(date.valueOf()) ? "-" : date.toLocaleString("zh-CN", { hour12: false });
 };
 
-const renderAnalysisHistory = (analyses) => {
+const historyPageNumbers = (currentPage, totalPages) => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const pages = [1];
+  if (currentPage > 4) pages.push("…");
+  for (let page = Math.max(2, currentPage - 1); page <= Math.min(totalPages - 1, currentPage + 1); page += 1) pages.push(page);
+  if (currentPage < totalPages - 3) pages.push("…");
+  pages.push(totalPages);
+  return [...new Set(pages)];
+};
+
+const renderHistoryPagination = ({ page, total, totalPages }) => {
+  if (!analysisHistoryPagination) return;
+  analysisHistoryPagination.hidden = total === 0;
+  if (total === 0) {
+    analysisHistoryPagination.replaceChildren();
+    return;
+  }
+  const summary = document.createElement("span");
+  summary.className = "analysis-history-total";
+  summary.textContent = `共 ${total} 条记录`;
+  const controls = document.createElement("div");
+  controls.className = "analysis-history-pages";
+  const addButton = (label, targetPage, { current = false, disabled = false } = {}) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `history-page-button${current ? " active" : ""}`;
+    button.textContent = label;
+    button.disabled = disabled;
+    if (!disabled) button.dataset.historyPage = String(targetPage);
+    controls.appendChild(button);
+  };
+  addButton("上一页", page - 1, { disabled: page <= 1 });
+  historyPageNumbers(page, totalPages).forEach((item) => {
+    if (item === "…") {
+      const ellipsis = document.createElement("span");
+      ellipsis.className = "history-page-ellipsis";
+      ellipsis.textContent = item;
+      controls.appendChild(ellipsis);
+      return;
+    }
+    addButton(String(item), item, { current: item === page, disabled: item === page });
+  });
+  addButton("下一页", page + 1, { disabled: page >= totalPages });
+  analysisHistoryPagination.replaceChildren(summary, controls);
+};
+
+const renderAnalysisHistory = (analyses, { page = 1, total = 0, totalPages = 1, keyword = "" } = {}) => {
   if (!analysisHistoryBody || !historyEmpty || !historyTableWrap) return;
-  historyEmpty.hidden = analyses.length > 0;
-  historyTableWrap.hidden = analyses.length === 0;
+  const hasRecords = analyses.length > 0;
+  const isSearchResult = Boolean(keyword);
+  historyEmpty.hidden = hasRecords || isSearchResult;
+  historyTableWrap.hidden = !hasRecords && !isSearchResult;
+  if (!hasRecords && isSearchResult) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 7;
+    cell.className = "analysis-history-no-match";
+    cell.textContent = "未找到匹配的分析记录。";
+    row.appendChild(cell);
+    analysisHistoryBody.replaceChildren(row);
+    renderHistoryPagination({ page, total, totalPages });
+    return;
+  }
+  historyEmpty.textContent = "暂无已保存的分析任务。完成一次登录后的 PCAP 分析后，结果会自动出现在这里。";
   analysisHistoryBody.replaceChildren(...analyses.map((analysis, index) => {
     const row = document.createElement("tr");
     const conclusion = analysis.conclusion || { kind: "failed", label: "未知" };
-    const cells = [String(index + 1), analysis.original_filename || "-", formatFileSize(analysis.file_size), formatAnalysisTime(analysis.created_at)];
+    const cells = [String((page - 1) * HISTORY_PAGE_SIZE + index + 1), analysis.original_filename || "-", formatFileSize(analysis.file_size), formatAnalysisTime(analysis.created_at)];
     cells.forEach((value) => {
       const cell = document.createElement("td");
       cell.textContent = value;
@@ -1139,21 +1205,34 @@ const renderAnalysisHistory = (analyses) => {
     row.appendChild(deleteCell);
     return row;
   }));
+  renderHistoryPagination({ page, total, totalPages });
 };
 
-const loadAnalysisHistory = async () => {
+const loadAnalysisHistory = async ({ page = historyPage, keyword = historyKeyword } = {}) => {
   if (!currentUser || !analysisHistoryBody) return;
   try {
-    const response = await fetch(`${apiBase}/analyses`, { credentials: "include" });
+    const params = new URLSearchParams({ page: String(page) });
+    if (keyword) params.set("keyword", keyword);
+    const response = await fetch(`${apiBase}/analyses?${params.toString()}`, { credentials: "include" });
     if (!response.ok) throw new Error(await getApiError(response));
     const payload = await response.json();
-    renderAnalysisHistory(Array.isArray(payload.analyses) ? payload.analyses : []);
+    const analyses = Array.isArray(payload.analyses) ? payload.analyses : [];
+    const total = Number(payload.total) || 0;
+    const totalPages = Math.max(1, Number(payload.total_pages) || 1);
+    if (total > 0 && page > totalPages) {
+      historyPage = totalPages;
+      return loadAnalysisHistory({ page: totalPages, keyword });
+    }
+    historyPage = page;
+    historyKeyword = keyword;
+    renderAnalysisHistory(analyses, { page, total, totalPages, keyword });
   } catch (error) {
     if (historyEmpty) {
       historyEmpty.hidden = false;
       historyEmpty.textContent = error instanceof Error ? `加载分析历史失败：${error.message}` : "加载分析历史失败，请稍后重试。";
     }
     if (historyTableWrap) historyTableWrap.hidden = true;
+    if (analysisHistoryPagination) analysisHistoryPagination.hidden = true;
   }
 };
 
@@ -1195,6 +1274,22 @@ const deleteSavedAnalysis = async (recordId) => {
 };
 
 const setupAnalysisHistory = () => {
+  analysisHistorySearch?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void loadAnalysisHistory({ page: 1, keyword: analysisHistoryKeyword?.value.trim() || "" });
+  });
+  analysisHistoryKeyword?.addEventListener("input", () => {
+    if (!analysisHistoryKeyword.value && historyKeyword) {
+      void loadAnalysisHistory({ page: 1, keyword: "" });
+    }
+  });
+  analysisHistoryPagination?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-history-page]");
+    const page = Number(button?.dataset.historyPage);
+    if (Number.isInteger(page) && page > 0 && page !== historyPage) {
+      void loadAnalysisHistory({ page, keyword: historyKeyword });
+    }
+  });
   analysisHistoryBody?.addEventListener("click", async (event) => {
     const detailButton = event.target.closest("[data-history-detail]");
     const deleteButton = event.target.closest("[data-history-delete]");

@@ -95,7 +95,7 @@ class ThreatFeatureMerger:
                     'total_bytes': rita_feature.get('total_bytes', 0),
                     # Detailed RITA evidence is indexed by src/dst/port because
                     # older RITA schemas did not always expose protocol.
-                    'rita': self.rita_evidence.get((src, dst, port), {}),
+                    'rita': self._find_rita_evidence(src, dst, port),
                 })
                 feature['detection_sources'].append('RITA')
             else:
@@ -183,6 +183,25 @@ class ThreatFeatureMerger:
             connections[key] = beacon
         
         return connections
+
+    def _find_rita_evidence(self, src: str, dst: str, port: str) -> Dict:
+        """Find evidence after a wildcard RITA destination was aligned.
+
+        Some RITA exports use ``::`` for a destination while the LSTM branch
+        supplies the concrete endpoint.  Alignment changes the merged feature
+        key, so retain one unambiguous RITA evidence record with the same
+        source and port instead of losing its detailed metrics.
+        """
+        exact = self.rita_evidence.get((src, dst, port))
+        if exact:
+            return exact
+        wildcard_destinations = {"", "::", "unknown", "-"}
+        matches = [
+            value for (e_src, e_dst, e_port), value in self.rita_evidence.items()
+            if e_src == src and str(e_port) == str(port)
+            and str(e_dst).strip().lower() in wildcard_destinations
+        ]
+        return matches[0] if len(matches) == 1 else {}
 
     @staticmethod
     def _align_rita_wildcard_destinations(

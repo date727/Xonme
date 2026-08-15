@@ -1,6 +1,7 @@
 """Regression tests for native report downloads."""
 
 from io import BytesIO
+from datetime import datetime, timezone
 import unittest
 from unittest.mock import patch
 
@@ -26,6 +27,17 @@ def _run_fonts(run) -> dict[str, str]:
 
 
 class ReportExportTests(unittest.TestCase):
+    def test_docx_records_current_creation_and_modification_times(self) -> None:
+        before = datetime.now(timezone.utc)
+        document = Document(BytesIO(report_export.build_docx(SAMPLE_REPORT)))
+        after = datetime.now(timezone.utc)
+
+        created = document.core_properties.created.replace(tzinfo=timezone.utc)
+        modified = document.core_properties.modified.replace(tzinfo=timezone.utc)
+        self.assertGreaterEqual(created, before)
+        self.assertLessEqual(created, after)
+        self.assertEqual(modified, created)
+
     def test_docx_uses_requested_chinese_and_latin_fonts(self) -> None:
         document = Document(BytesIO(report_export.build_docx(SAMPLE_REPORT)))
 

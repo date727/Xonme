@@ -304,7 +304,7 @@
 
       <section id="report-panel" class="panel result-panel" hidden aria-live="polite" data-legacy-report-panel>
         <div class="result-head"><div><h2>分析报告</h2></div><div class="report-actions" aria-label="分析报告下载"><select id="report-format" aria-label="选择报告格式"><option value="md">.md</option><option value="docx">.docx</option><option value="pdf">.pdf</option></select><button id="download-report-btn" class="report-download" type="button" disabled>下载</button><button id="print-report-btn" class="report-print" type="button" disabled>打印</button></div></div>
-        <div id="result" class="result">分析任务运行中，报告将实时显示在这里。</div>
+        <div id="result" class="result report-document">分析任务运行中，报告将实时显示在这里。</div>
       </section>
     </section>
 
@@ -616,18 +616,17 @@
       <section id="data-center-empty" class="panel data-center-empty" aria-labelledby="data-center-empty-title">
         <div class="data-center-empty-icon" aria-hidden="true">▥</div>
         <h1 id="data-center-empty-title">暂无分析结果</h1>
-        <p>完成一次 PCAP 分析后，这里将集中展示任务信息、可疑连接证据、溯源关联和 AI 分析报告。</p>
+        <p>完成一次 PCAP 分析后，这里将集中展示任务信息、可疑连接证据、溯源关联和分析报告。</p>
         <div class="data-center-empty-actions">
           <button class="primary" type="button" data-tab="tool">前往检测中心</button>
           <button id="data-center-history-btn" class="secondary" type="button" data-tab="profile" hidden>从分析历史选择</button>
         </div>
       </section>
       <section id="visualization-module" class="data-workspace" aria-label="分析数据中心" hidden style="display: none">
-        <aside class="data-sidebar"><p>本次分析</p><button class="data-nav active" data-data-page="overview">概览总览</button><button class="data-nav" data-data-page="topology">网络拓扑</button><button class="data-nav" data-data-page="rita">RITA 分析</button><button class="data-nav" data-data-page="lstm">LSTM 检测</button><button class="data-nav" data-data-page="attribution">溯源归因</button><button class="data-nav" data-data-page="report">AI 分析报告</button></aside>
+        <aside class="data-sidebar"><p>本次分析</p><button class="data-nav active" data-data-page="overview">检测总览</button><button class="data-nav" data-data-page="dual-engine">双引擎检测</button><button class="data-nav" data-data-page="attribution">溯源归因</button><button class="data-nav" data-data-page="report">分析报告</button></aside>
         <div id="data-center-new" class="data-content">
-          <section class="data-page active" data-data-content="overview"><h2>概览总览</h2><div id="analysis-meta" class="analysis-meta"></div><div class="visualization-grid"><article class="viz-kpi"><span>可疑连接数</span><strong id="viz-threat-count">0</strong></article><article class="viz-kpi"><span>最高 Beacon Score</span><strong id="viz-beacon-max">暂无数据</strong></article><article class="viz-kpi"><span>LSTM 最高置信度</span><strong id="viz-lstm-max">暂无数据</strong></article><article class="viz-kpi"><span>归因置信度</span><strong id="viz-rag-confidence">暂无数据</strong></article></div><article class="visualization-card"><h3>综合研判摘要</h3><p id="overview-summary"></p></article><article class="visualization-card"><h3>重点可疑连接</h3><div class="table-wrap"><table class="case-table"><tbody id="overview-threats"></tbody></table></div></article></section>
-          <section class="data-page" data-data-content="topology"><h2>网络拓扑</h2><article class="visualization-card topology-card"><div id="network-topology-chart" class="echart-canvas"></div></article><aside id="topology-evidence" class="evidence-drawer"><h3>当前分析连接</h3><div id="topology-evidence-body"></div></aside></section>
-          <section class="data-page" data-data-content="rita"><h2>RITA 分析</h2><div id="rita-content" class="visualization-empty">当前连接暂无 RITA 明细数据。</div></section><section class="data-page" data-data-content="lstm"><h2>LSTM 检测</h2><div id="lstm-content" class="visualization-empty">当前连接没有 LSTM 告警或可预测序列。</div></section><section class="data-page" data-data-content="attribution"><h2>候选归因</h2><div id="attribution-content" class="visualization-empty">暂无候选归因。</div></section>
+          <section class="data-page active overview-page" data-data-content="overview"><header class="overview-page-heading"><div class="overview-title-copy"><h2>检测总览</h2><p>查看当前分析任务的关键结果、综合结论与重点证据</p></div><article class="overview-file-strip" aria-label="分析文件信息"><div class="overview-file-main"><span class="overview-eyebrow">分析文件</span><strong id="overview-file-name" title="">暂无数据</strong><div class="overview-file-details"><span>文件大小 <b id="overview-file-size">暂无数据</b></span><i aria-hidden="true"></i><span>分析时间 <b id="overview-file-time">暂无数据</b></span></div></div><div class="overview-file-state"><span id="overview-status-badge" class="overview-badge status">暂无数据</span><span id="overview-risk-badge" class="overview-badge risk low">暂无数据</span></div></article></header><section class="overview-section"><div class="overview-kpi-grid"><article class="overview-kpi"><span>可疑连接数</span><strong id="viz-threat-count">0</strong><small id="viz-threat-note">等待分析结果</small></article><article class="overview-kpi"><span>最高 Beacon Score</span><strong id="viz-beacon-max">暂无数据</strong><small id="viz-beacon-note">等待 RITA 检测结果</small></article><article class="overview-kpi"><span>LSTM 最高置信度</span><strong id="viz-lstm-max">暂无数据</strong><small id="viz-lstm-note">等待 LSTM 检测结果</small></article><article class="overview-kpi"><span>归因置信度</span><strong id="viz-rag-confidence">暂无数据</strong><small id="viz-rag-note">等待溯源检索结果</small></article></div></section><article class="overview-conclusion"><div class="overview-conclusion-icon" aria-hidden="true">✓</div><div class="overview-conclusion-body"><div class="overview-conclusion-head"><h3>综合研判</h3><span id="overview-conclusion-risk" class="overview-badge risk low">暂无数据</span></div><p id="overview-summary-main">等待分析结果生成综合结论。</p><p id="overview-summary-advice">请结合业务场景核查异常通信。</p></div><div class="overview-conclusion-evidence"><div class="overview-conclusion-evidence-head"><span>重点证据</span><span id="overview-evidence-count">0 条</span></div><div class="table-wrap"><table class="overview-threat-table"><thead><tr><th>源地址</th><th>目标地址</th><th>检测引擎</th><th>Beacon Score</th><th>LSTM 置信度</th><th>风险等级</th></tr></thead><tbody id="overview-threats"></tbody></table></div></div></article></section>
+          <section class="data-page" data-data-content="dual-engine"><h2>双引擎检测</h2><article class="visualization-card dual-engine-section"><div id="rita-content" class="visualization-empty">当前连接暂无 RITA 明细数据。</div></article><article class="visualization-card dual-engine-section"><h3>LSTM 检测结果</h3><div id="lstm-content" class="visualization-empty">当前连接没有 LSTM 告警或可预测序列。</div></article></section><section class="data-page" data-data-content="attribution"><h2>候选归因</h2><div id="attribution-content" class="visualization-empty">暂无候选归因。</div></section>
         </div>
       </section>
 
@@ -651,6 +650,11 @@
       <div class="profile-grid">
         <section class="panel profile-card profile-history-card">
           <div class="panel-title compact"><h2>分析历史</h2><p>这里保存当前账号发起的分析任务。点击“详细数据”可在数据中心查看检测结果、可疑连接拓扑和溯源证据。</p></div>
+          <form id="analysis-history-search" class="analysis-history-search" role="search">
+            <label class="sr-only" for="analysis-history-keyword">按文件名查找历史记录</label>
+            <input id="analysis-history-keyword" type="search" placeholder="搜索文件名，例如 benign5 或 .pcapng" autocomplete="off">
+            <button type="submit">搜索</button>
+          </form>
           <div id="history-empty" class="history-empty">暂无已保存的分析任务。完成一次登录后的 PCAP 分析后，结果会自动出现在这里。</div>
           <div id="history-table-wrap" class="table-wrap analysis-history-wrap" hidden>
             <table class="case-table analysis-history-table">
@@ -668,6 +672,7 @@
               <tbody id="analysis-history-body"></tbody>
             </table>
           </div>
+          <div id="analysis-history-pagination" class="analysis-history-pagination" hidden aria-label="分析历史分页"></div>
         </section>
       </div>
 

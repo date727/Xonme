@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import re
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
@@ -32,8 +33,8 @@ WORD_HEADING_SIZE = 14
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 PDF_FONT_FILES = {
-    "C2SourceHanSansRegular": "SourceHanSansSC-Regular.otf",
-    "C2SourceHanSansBold": "SourceHanSansSC-Bold.otf",
+    "C2SourceHanSansRegular": "SourceHanSansSC-Regular.ttf",
+    "C2SourceHanSansBold": "SourceHanSansSC-Bold.ttf",
     "C2LiberationSerifRegular": "LiberationSerif-Regular.ttf",
     "C2LiberationSerifBold": "LiberationSerif-Bold.ttf",
 }
@@ -181,6 +182,9 @@ def _format_docx_paragraph(paragraph, *, before: float = 0, after: float = 0) ->
 
 def build_docx(markdown: str) -> bytes:
     document = Document()
+    now = datetime.now(timezone.utc)
+    document.core_properties.created = now
+    document.core_properties.modified = now
     section = document.sections[0]
     section.top_margin = Inches(0.7)
     section.bottom_margin = Inches(0.7)

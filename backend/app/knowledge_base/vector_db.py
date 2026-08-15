@@ -12,6 +12,33 @@ LOCAL_EMBEDDING_MODEL_PATH = (
     Path(__file__).resolve().parents[2] / "local_models" / "all-MiniLM-L6-v2"
 )
 DEFAULT_CHROMA_DB_PATH = Path(__file__).resolve().parents[2] / "chroma_db"
+CHINESE_DISPLAY_MAP_PATH = Path(__file__).resolve().parents[2] / "data" / "knowledge_base_zh.json"
+
+_chinese_display_map_mtime: int | None = None
+_chinese_display_map: dict[str, Any] = {}
+
+
+def _load_chinese_display_map() -> dict[str, Any]:
+    """Load the optional, separately generated Chinese display map safely."""
+    global _chinese_display_map_mtime, _chinese_display_map
+    try:
+        modified_at = CHINESE_DISPLAY_MAP_PATH.stat().st_mtime_ns
+    except OSError:
+        return {}
+    if _chinese_display_map_mtime == modified_at:
+        return _chinese_display_map
+    try:
+        data = json.loads(CHINESE_DISPLAY_MAP_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    _chinese_display_map_mtime = modified_at
+    _chinese_display_map = data if isinstance(data, dict) else {}
+    return _chinese_display_map
+
+
+def _translated_text(translations: dict[str, Any], digest: str | None) -> str:
+    entry = translations.get(digest or "")
+    return str(entry.get("zh", "")).strip() if isinstance(entry, dict) else ""
 
 try:
     import chromadb
@@ -190,6 +217,14 @@ class VectorKnowledgeBase:
     @staticmethod
     def _aggregate_evidence_chunks(chunk_results: list[dict], top_k: int) -> list[dict]:
         """Aggregate evidence-level retrieval hits into APT group candidates."""
+        def document_value(text: str, label: str) -> str:
+            """Read a labelled value from the RAG document format safely."""
+            prefix = f"{label}:"
+            for line in str(text or "").splitlines():
+                if line.startswith(prefix):
+                    return line[len(prefix):].strip()
+            return ""
+
         grouped: dict[str, dict] = {}
 
         for chunk in chunk_results:
@@ -211,6 +246,11 @@ class VectorKnowledgeBase:
                         "c2_technique_count": metadata.get("c2_technique_count", 0),
                         "c2_techniques": [],
                         "matched_techniques": [],
+                        # The persisted RAG document already contains these
+                        # STIX fields, so old knowledge-base indexes can power
+                        # a richer UI without a rebuild.
+                        "background": document_value(chunk["text"], "Group description"),
+                        "associated_software": document_value(chunk["text"], "Associated software/tools"),
                     },
                     "text": chunk["text"],
                     "evidence_chunks": [],
@@ -234,6 +274,9 @@ class VectorKnowledgeBase:
             if technique_id and technique_id not in group["metadata"]["matched_techniques"]:
                 group["metadata"]["matched_techniques"].append(technique_id)
 
+        display_map = _load_chinese_display_map()
+        translations = display_map.get("translations", {}) if isinstance(display_map.get("translations"), dict) else {}
+        translated_groups = display_map.get("groups", {}) if isinstance(display_map.get("groups"), dict) else {}
         aggregated = []
         for group in grouped.values():
             evidence = sorted(
@@ -257,6 +300,36 @@ class VectorKnowledgeBase:
                 for item in evidence
                 if item.get("technique_id")
             ][:5]
+            group["metadata"]["matched_technique_details"] = [
+                {
+                    "id": item.get("technique_id", ""),
+                    "name": item.get("technique_name", ""),
+                    "evidence": document_value(item.get("text", ""), "Evidence"),
+                }
+                for item in evidence[:5]
+                if item.get("technique_id")
+            ]
+            translated_group = translated_groups.get(group["id"], {})
+            if isinstance(translated_group, dict):
+                background_zh = _translated_text(translations, translated_group.get("background"))
+                if background_zh:
+                    group["metadata"]["background_zh"] = background_zh
+                translated_techniques = translated_group.get("c2_techniques", {})
+                if isinstance(translated_techniques, dict):
+                    for detail in group["metadata"]["matched_technique_details"]:
+                        translated_technique = translated_techniques.get(detail["id"], {})
+                        fields = translated_technique.get("translations", {}) if isinstance(translated_technique, dict) else {}
+                        if not isinstance(fields, dict):
+                            continue
+                        name_zh = _translated_text(translations, fields.get("name"))
+                        evidence_zh = _translated_text(translations, fields.get("relationship_desc"))
+                        description_zh = _translated_text(translations, fields.get("description"))
+                        if name_zh:
+                            detail["name_zh"] = name_zh
+                        if evidence_zh:
+                            detail["evidence_zh"] = evidence_zh
+                        if description_zh:
+                            detail["description_zh"] = description_zh
             group["text"] = evidence[0]["text"] if evidence else group["text"]
             aggregated.append(group)
 

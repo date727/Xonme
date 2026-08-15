@@ -1,5 +1,6 @@
 ﻿import json
 import hashlib
+import ipaddress
 import os
 import re
 import shutil
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
@@ -352,6 +353,170 @@ def _collect_zeek_logs(log_dir: Path) -> str:
     return "\n\n".join(parts) if parts else "(No Zeek logs found)"
 
 
+def _canonical_endpoint(value: str) -> str:
+    """Normalize ClickHouse-style IPv4-mapped IPv6 to regular IPv4 text."""
+    try:
+        address = ipaddress.ip_address(str(value).strip())
+    except ValueError:
+        return str(value).strip()
+    mapped_ipv4 = getattr(address, "ipv4_mapped", None)
+    return str(mapped_ipv4 or address)
+
+
+def _add_zeek_connection_series(threats: list[dict], log_dir: Path) -> None:
+    """Attach ordered, per-connection behaviour values from Zeek ``conn.log``.
+
+    RITA's ``*_interval_counts`` and ``ds_size_counts`` are histograms, so
+    their original event order is unrecoverable.  The dashboard's sequence
+    charts instead use Zeek's real connection records sorted by ``ts``:
+    interval seconds, instantaneous rate (connections/minute), and total
+    bytes for each connection.
+    """
+    conn_path = log_dir / "conn.log"
+    if not conn_path.exists():
+        return
+    try:
+        lines = conn_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        print(f"Zeek: connection-frequency extraction unavailable - {exc}")
+        return
+    fields: list[str] = []
+    rows: list[dict[str, str]] = []
+    for line in lines:
+        if line.startswith("#fields"):
+            fields = line.rstrip("\n").split("\t")[1:]
+        elif fields and line and not line.startswith("#"):
+            values = line.rstrip("\n").split("\t")
+            if len(values) == len(fields):
+                rows.append(dict(zip(fields, values)))
+    if not rows:
+        return
+
+    for threat in threats:
+        evidence = threat.get("rita")
+        if not isinstance(evidence, dict):
+            continue
+        src = _canonical_endpoint(str(threat.get("src_ip", "")))
+        dst = _canonical_endpoint(str(threat.get("dst_ip", "")))
+        port = str(threat.get("dst_port", ""))
+        wildcard_dst = dst.strip().lower() in {"", "::", "unknown", "-"}
+        connections: list[tuple[float, int]] = []
+        for row in rows:
+            row_src = _canonical_endpoint(row.get("id.orig_h", ""))
+            row_dst = _canonical_endpoint(row.get("id.resp_h", ""))
+            if row_src != src or str(row.get("id.resp_p", "")) != port:
+                continue
+            if not wildcard_dst and row_dst != dst:
+                continue
+            try:
+                timestamp = float(row.get("ts", ""))
+                orig_bytes = max(0, int(float(row.get("orig_bytes", "0") or 0)))
+                resp_bytes = max(0, int(float(row.get("resp_bytes", "0") or 0)))
+                connections.append((timestamp, orig_bytes + resp_bytes))
+            except ValueError:
+                continue
+        if not connections:
+            continue
+        connections.sort(key=lambda item: item[0])
+        intervals = [0.0]
+        for index in range(1, len(connections)):
+            intervals.append(max(0.0, connections[index][0] - connections[index - 1][0]))
+        evidence["connection_sequence"] = {
+            "indexes": list(range(1, len(connections) + 1)),
+            "interval_seconds": intervals,
+            "frequency_per_minute": [0.0 if gap <= 0 else 60.0 / gap for gap in intervals],
+            "total_bytes": [byte_count for _, byte_count in connections],
+        }
+
+
+def _build_engine_display_results(
+    csv_text: str,
+    *,
+    rita_ok: bool,
+    lstm_results: dict | None,
+    rita_imported: bool,
+    rita_db_name: str | None,
+    log_dir: Path,
+) -> dict:
+    """Build non-alert engine output for the dashboard without changing alerts.
+
+    ``threats`` remains strictly reserved for RITA/LSTM detections that passed
+    the alert merge.  This parallel payload exposes real engine output for a
+    benign or below-threshold sample, including RITA histograms and Zeek-based
+    per-connection sequences.
+    """
+    result: dict = {
+        "rita": [],
+        "lstm": lstm_results or {
+            "status": "skipped_or_failed",
+            "reason": "No usable TCP sequence, unavailable dependency, or prediction failure",
+            "beacons": [],
+        },
+    }
+    if not rita_ok:
+        return result
+
+    from app.data_extractor import ThreatFeatureExtractor
+
+    extractor = ThreatFeatureExtractor(csv_text)
+    try:
+        evidence = extractor.extract_display_evidence()
+    except Exception as exc:
+        print(f"RITA: raw dashboard evidence unavailable - {exc}")
+        return result
+
+    if rita_imported and rita_db_name:
+        try:
+            from app.rita_feature_exporter import export_rita_connection_evidence
+
+            mixtape_evidence = export_rita_connection_evidence(rita_db_name)
+            for mix_key, details in mixtape_evidence.items():
+                mix_src, mix_dst, mix_port = mix_key
+                matching_key = next(
+                    (
+                        csv_key for csv_key in evidence
+                        if _canonical_endpoint(csv_key[0]) == _canonical_endpoint(mix_src)
+                        and (not str(csv_key[2]) or str(csv_key[2]) == str(mix_port))
+                        and (
+                            _canonical_endpoint(csv_key[1]) == _canonical_endpoint(mix_dst)
+                            or _canonical_endpoint(csv_key[1]) in {"", "::"}
+                            or _canonical_endpoint(mix_dst) in {"", "::"}
+                        )
+                    ),
+                    None,
+                )
+                target_key = matching_key or mix_key
+                if matching_key and not str(matching_key[2]):
+                    target_key = (matching_key[0], matching_key[1], str(mix_port))
+                    evidence[target_key] = evidence.pop(matching_key)
+                evidence[target_key] = {
+                    **evidence.get(target_key, {}),
+                    **{name: value for name, value in details.items() if value is not None},
+                    "evidence_source": "rita_mixtape",
+                }
+        except Exception as exc:
+            print(f"RITA: raw mixtape dashboard evidence unavailable - {exc}")
+
+    raw_rita = []
+    for (src, dst, port), details in evidence.items():
+        raw_rita.append({
+            "src_ip": src,
+            "dst_ip": dst,
+            "dst_host": details.get("destination_host"),
+            "dst_port": str(port),
+            "protocol": details.get("protocol") or "",
+            "beacon_score": details.get("beacon_score"),
+            "connection_count": details.get("connection_count"),
+            "total_duration": details.get("total_duration"),
+            "total_bytes": details.get("total_bytes"),
+            "display_state": "below_alert_threshold",
+            "rita": details,
+        })
+    _add_zeek_connection_series(raw_rita, log_dir)
+    result["rita"] = raw_rita
+    return result
+
+
 def _save_uploaded_pcap(upload: UploadFile, destination: Path, job: AnalysisJob | None = None) -> None:
     """Copy an upload in chunks so cancellation also works during large uploads."""
 
@@ -548,12 +713,29 @@ def _merge_detection_results(
         print("Detection merge: no threats detected by RITA or LSTM")
         return []
 
-    rita_evidence = {}
+    # The ``rita view`` CSV is already available when RITA succeeded.  Build a
+    # local evidence baseline first, then let the richer mixtape query fill in
+    # any columns that the CSV version does not expose.
+    rita_evidence: dict = {}
+    if rita_ok:
+        try:
+            rita_evidence = extractor.extract_display_evidence()
+        except Exception as exc:
+            print(f"RITA: CSV display evidence unavailable - {exc}")
     if rita_imported and rita_db_name:
         try:
             from app.rita_feature_exporter import export_rita_connection_evidence
 
-            rita_evidence = export_rita_connection_evidence(rita_db_name)
+            mixtape_evidence = export_rita_connection_evidence(rita_db_name)
+            for key, details in mixtape_evidence.items():
+                baseline = rita_evidence.get(key, {})
+                # Do not discard valid CSV fields when a RITA version omits a
+                # column from threat_mixtape.
+                rita_evidence[key] = {
+                    **baseline,
+                    **{name: value for name, value in details.items() if value is not None},
+                    "evidence_source": "rita_mixtape",
+                }
         except Exception as exc:
             print(f"RITA: detailed mixtape evidence unavailable - {exc}")
     merged = merge_threat_features(rita_features, lstm_results, rita_evidence)
@@ -576,14 +758,6 @@ def _run_optional_attribution(
     rag_engine = ThreatAttributionEngine(kb_path=APP_ROOT / "chroma_db")
     print(f"RAG: searching for matching APT groups (top-{rag_engine.top_k})...")
     return _build_sample_rag_context(rag_engine, merged_features, job=job)
-
-
-def _rag_evidence_appendix(rag_context: str | None) -> str:
-    return f"\n\n---\n\n{rag_context}" if rag_context else ""
-
-
-def _lstm_evidence_appendix(lstm_results: dict | None) -> str:
-    return f"\n\n---\n\n{_fmt_lstm(lstm_results)}"
 
 
 def _build_ai_request(
@@ -677,7 +851,9 @@ def generate_ai_analysis(
     data = response.json()
     try:
         report = data["choices"][0]["message"]["content"].strip()
-        return report + _lstm_evidence_appendix(lstm_results) + _rag_evidence_appendix(rag_context)
+        # 原始引擎结果和 RAG 证据保存在分析产物及 dashboard.json 中，
+        # 不追加到面向用户的 AI 报告正文。
+        return report
     except (KeyError, IndexError, AttributeError) as exc:
         raise HTTPException(
             status_code=502, detail="Unexpected SiliconFlow response format"
@@ -888,10 +1064,20 @@ def _delete_rita_database(database_name: str) -> None:
 
 
 @app.get("/analyses")
-async def list_saved_analyses(user: User = Depends(get_current_user)) -> dict:
+async def list_saved_analyses(
+    keyword: str = Query(default="", max_length=255),
+    page: int = Query(default=1, ge=1),
+    user: User = Depends(get_current_user),
+) -> dict:
     """List only the current user's persisted analysis tasks."""
 
-    records = list_analysis_records(user.id)
+    page_size = 10
+    records, total = list_analysis_records(
+        user.id,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+    )
     return {
         "analyses": [
             {
@@ -904,7 +1090,11 @@ async def list_saved_analyses(user: User = Depends(get_current_user)) -> dict:
                 "conclusion": _task_conclusion(record),
             }
             for record in records
-        ]
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
     }
 
 
@@ -1266,6 +1456,10 @@ async def analyze_pcap_stream(
             rag_context = None
             merged_features: list[dict] = []
             rag_result: dict | None = None
+            engine_results: dict = {
+                "rita": [],
+                "lstm": lstm_results or {"status": "skipped_or_failed", "beacons": []},
+            }
             try:
                 merged_features = _merge_detection_results(
                     csv_text,
@@ -1274,6 +1468,7 @@ async def analyze_pcap_stream(
                     rita_imported=rita_imported,
                     rita_db_name=rita_db_name,
                 )
+                _add_zeek_connection_series(merged_features, output_dir)
             except AnalysisCancelled:
                 raise
             except Exception as exc:
@@ -1283,6 +1478,18 @@ async def analyze_pcap_stream(
                 import traceback
 
                 traceback.print_exc()
+
+            try:
+                engine_results = _build_engine_display_results(
+                    csv_text,
+                    rita_ok=rita_ok,
+                    lstm_results=lstm_results,
+                    rita_imported=rita_imported,
+                    rita_db_name=rita_db_name,
+                    log_dir=output_dir,
+                )
+            except Exception as exc:
+                print(f"Engine display results: failed - {exc}")
 
             try:
                 rag_context, rag_results = _run_optional_attribution(
@@ -1326,9 +1533,9 @@ async def analyze_pcap_stream(
                     json.dumps({"content": delta}, ensure_ascii=False),
                 )
 
+            # 流式接口与普通接口保持一致：报告只保存模型生成的研判正文。
+            # LSTM/RAG 结构化数据仍保留在 dashboard.json 供数据中心使用。
             analysis_markdown = "".join(chunks)
-            analysis_markdown += _lstm_evidence_appendix(lstm_results)
-            analysis_markdown += _rag_evidence_appendix(rag_context)
             report_path = artifacts.report_dir / "analysis.md"
             report_path.write_text(analysis_markdown, encoding="utf-8")
             dashboard = {
@@ -1341,12 +1548,15 @@ async def analyze_pcap_stream(
                     "rag_completed": rag_result is not None,
                 },
                 "threats": merged_features,
+                "engine_results": engine_results,
                 "attribution": rag_result,
                 "lstm": lstm_results or {"status": "skipped_or_failed", "beacons": []},
                 "rita": {
                     "available": rita_ok,
                     "database": rita_db_name,
-                    "detailed_evidence_available": bool(rita_imported),
+                    "detailed_evidence_available": any(
+                        bool(feature.get("rita")) for feature in merged_features
+                    ),
                 },
             }
             _write_json(artifacts.visualization_dir / "dashboard.json", dashboard)

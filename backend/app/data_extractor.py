@@ -11,6 +11,7 @@
 """
 
 import csv
+import json
 from pathlib import Path
 from typing import Any
 
@@ -522,6 +523,83 @@ class ThreatFeatureExtractor:
         
         print(f"RITA: extracted {len(high_risk)} complete threat features")
         return high_risk
+
+    def extract_display_evidence(self) -> dict[tuple[str, str, str], dict[str, Any]]:
+        """Build dashboard evidence directly from the exported RITA CSV.
+
+        ``rita view`` is the authoritative artifact produced by this analysis.
+        Detailed ClickHouse queries are useful enrichment, but must not be the
+        only way that the UI can display fields already present in that export.
+        Missing columns intentionally remain ``None`` so the browser never
+        presents invented values as RITA output.
+        """
+        extractor = self.rita_extractor
+        if not extractor.rows:
+            extractor.parse()
+
+        evidence: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for row in extractor.rows:
+            src = extractor._pick(row, "src", "src_ip", "source", "source_ip")
+            dst = extractor._pick(row, "dst", "dst_ip", "destination", "destination_ip")
+            service = extractor._pick(row, "port_proto_service")
+            port = (
+                extractor._pick(row, "dst_port", "port")
+                or extractor._extract_port(service)
+            )
+            if not src or not dst:
+                continue
+            protocol = (
+                extractor._pick(row, "protocol", "proto", "ip_protocol")
+                or extractor._extract_protocol(service)
+                or None
+            )
+
+            def number(*names: str) -> float | None:
+                value = extractor._pick(row, *names)
+                return extractor._safe_float(value) if value else None
+
+            intervals = extractor._pick(row, "ts_intervals")
+            interval_counts = extractor._pick(row, "ts_interval_counts")
+            evidence[(src, dst, str(port))] = {
+                "protocol": protocol.lower() if protocol else None,
+                "beacon_score": number("beacon_score", "score", "beacon"),
+                "destination_host": extractor._pick(row, "fqdn", "domain", "hostname") or None,
+                "timestamp_score": number("timestamp_score", "time_score"),
+                "datasize_score": number("datasize_score", "data_size_score"),
+                "duration_score": number("duration_score"),
+                "histogram_score": number("histogram_score", "hist_score"),
+                # CSV exports may represent arrays differently by RITA version;
+                # retain them only when they are JSON arrays.
+                "ts_intervals": self._json_number_list(intervals),
+                "ts_interval_counts": self._json_number_list(interval_counts),
+                "connection_count": number("connection_count", "count"),
+                "total_duration": number("duration", "total_duration"),
+                "total_bytes": number("total_bytes", "bytes"),
+                "long_connection": number("long_conn_score", "long_connection_score"),
+                "c2_over_dns": number("c2_over_dns_score", "c2_dns_score"),
+                "subdomain_count": number("subdomains", "subdomain_count"),
+                "threat_intelligence": extractor._pick(
+                    row, "threat_intelligence", "threat_intel_score"
+                ) or None,
+                "evidence_source": "rita_view_csv",
+            }
+        return evidence
+
+    @staticmethod
+    def _json_number_list(value: str) -> list[float] | None:
+        """Parse a JSON array without guessing at version-specific CSV syntax."""
+        if not value:
+            return None
+        try:
+            decoded = json.loads(value)
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(decoded, list):
+            return None
+        try:
+            return [float(item) for item in decoded]
+        except (TypeError, ValueError):
+            return None
 
 
 def main():

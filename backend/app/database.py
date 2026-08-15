@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, create_engine, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, create_engine, func, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 
@@ -157,17 +157,36 @@ def _record_to_dict(record: AnalysisRecord) -> dict:
     }
 
 
-def list_analysis_records(user_id: int) -> list[dict]:
-    """List one user's tasks without exposing filesystem paths to other users."""
+def list_analysis_records(
+    user_id: int,
+    *,
+    keyword: str = "",
+    page: int = 1,
+    page_size: int = 10,
+) -> tuple[list[dict], int]:
+    """Return one user's paginated task list and its matching-record count."""
 
+    normalized_keyword = keyword.strip()
+    safe_page = max(1, page)
+    safe_page_size = max(1, page_size)
     with get_session_factory()() as session:
+        query = session.query(AnalysisRecord).filter(AnalysisRecord.user_id == user_id)
+        if normalized_keyword:
+            # ``contains(..., autoescape=True)`` keeps user-entered ``%`` and
+            # ``_`` as literal filename characters rather than SQL wildcards.
+            query = query.filter(
+                func.lower(AnalysisRecord.original_filename).contains(
+                    normalized_keyword.lower(), autoescape=True
+                )
+            )
+        total = query.count()
         records = (
-            session.query(AnalysisRecord)
-            .filter(AnalysisRecord.user_id == user_id)
-            .order_by(AnalysisRecord.created_at.desc())
+            query.order_by(AnalysisRecord.created_at.desc())
+            .offset((safe_page - 1) * safe_page_size)
+            .limit(safe_page_size)
             .all()
         )
-        return [_record_to_dict(record) for record in records]
+        return [_record_to_dict(record) for record in records], total
 
 
 def get_analysis_record_for_user(record_id: int, user_id: int) -> dict | None:
