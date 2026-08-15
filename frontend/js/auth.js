@@ -72,7 +72,7 @@ form?.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(await readError(response));
     setMessage(endpoint === "/auth/login" ? "登录成功，正在进入系统…" : "注册成功，正在进入系统…", "success");
     const next = new URLSearchParams(window.location.search).get("next");
-    const destination = next === "profile" ? "#profile" : "#tool";
+    const destination = next === "profile" ? "#profile" : "#home";
     window.setTimeout(() => { window.location.href = `index.html${destination}`; }, 450);
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "请求失败，请稍后重试", "error");
