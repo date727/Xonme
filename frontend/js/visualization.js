@@ -83,34 +83,22 @@
     const ritaResults = [...list.filter((item) => (item.detection_sources || []).includes("RITA")), ...rawRita];
     const maxBeacon = Math.max(0, ...ritaResults.map((item) => num(item.beacon_score)));
     const maxLstm = Math.max(0, ...list.map((item) => num(item.lstm_confidence)));
+    const hasLstmValue = list.some((item) => Number.isFinite(Number(item.lstm_confidence)));
     const attributionConfidence = attribution.confidence == null ? null : num(attribution.confidence);
-    const lstmStatus = dashboard?.lstm || dashboard?.engine_results?.lstm || {};
-    const hasLstmAlert = list.some((item) => Number.isFinite(Number(item.lstm_confidence)));
-    const lstmCompleted = !hasLstmAlert && Number.isFinite(Number(lstmStatus.total_connections));
-    const attributionTriggered = Array.isArray(attribution?.candidates) && attribution.candidates.length > 0;
-    const setKpiPresentation = (valueId, label, valueText, note, state) => {
-      const valueEl = $(valueId);
-      const card = valueEl?.closest(".overview-kpi");
-      if (!valueEl || !card) return;
-      const heading = card.querySelector("span");
-      if (heading) heading.textContent = label;
-      valueEl.textContent = valueText;
-      const detail = card.querySelector("small");
-      if (detail) detail.textContent = note;
-      card.classList.toggle("overview-kpi-status", Boolean(state));
-      card.classList.toggle("overview-kpi-status-neutral", state === "neutral");
-      card.classList.toggle("overview-kpi-status-positive", state === "positive");
-    };
-    const resetKpiPresentation = (valueId, label) => {
-      const valueEl = $(valueId);
-      const card = valueEl?.closest(".overview-kpi");
-      if (!card) return;
-      const heading = card.querySelector("span");
-      if (heading) heading.textContent = label;
-      card.classList.remove("overview-kpi-status", "overview-kpi-status-neutral", "overview-kpi-status-positive");
-    };
-    resetKpiPresentation("viz-lstm-max", "LSTM 最高置信度");
-    resetKpiPresentation("viz-rag-confidence", "归因置信度");
+    const lstmStatus = dashboard?.lstm?.status;
+    const attributionStatus = dashboard?.attribution_status;
+    const lstmStatusNote = {
+      insufficient_sequence: "时序样本不足",
+      completed: "未发现 Beacon 异常",
+      unavailable: "模型不可用",
+      failed: "检测失败，请查看任务日志",
+    }[lstmStatus] || "未参与本次评估";
+    const attributionStatusNote = {
+      no_threat: "当前无待归因威胁",
+      no_candidate: "未检索到归因候选",
+      unavailable: "归因服务不可用",
+      failed: "归因失败，请查看任务日志",
+    }[attributionStatus] || "未参与本次评估";
     const riskKey = String(primary?.threat_category || "low").toLowerCase();
     const riskLabel = primary ? `${risk(riskKey)}风险` : "未发现风险";
     const statusLabel = analysis?.status === "completed" ? "已完成" : (analysis?.status || "暂无数据");
@@ -128,40 +116,12 @@
 
     setValue("viz-threat-count", list.length);
     setValue("viz-beacon-max", ritaResults.length ? maxBeacon.toFixed(1) : null);
-    setValue("viz-lstm-max", list.length ? `${maxLstm.toFixed(1)}%` : null);
-    setValue("viz-rag-confidence", attributionConfidence == null ? null : `${attributionConfidence.toFixed(1)}%`);
+    setValue("viz-lstm-max", hasLstmValue ? `${maxLstm.toFixed(1)}%` : "—");
+    setValue("viz-rag-confidence", attributionConfidence == null ? "—" : `${attributionConfidence.toFixed(1)}%`);
     setValue("viz-threat-note", list.length ? `${list.length} 条需重点关注` : "未发现重点可疑连接");
     setValue("viz-beacon-note", ritaResults.length ? (list.length ? (maxBeacon >= 80 ? "强周期特征" : maxBeacon >= 50 ? "中等周期特征" : "低周期特征") : "原始 RITA 结果，未达告警阈值") : "暂无 RITA 结果");
-    setValue("viz-lstm-note", list.length ? (maxLstm >= 80 ? "高置信异常" : maxLstm >= 50 ? "中等置信异常" : "低置信异常") : "暂无 LSTM 告警");
-    setValue("viz-rag-note", attributionConfidence == null ? "暂无归因结果" : (attributionConfidence >= 70 ? "较高归因可信度" : attributionConfidence >= 40 ? "中等归因可信度" : "低归因可信度"));
-
-    if (!hasLstmAlert && lstmStatus.status === "skipped_or_failed") {
-      setKpiPresentation(
-        "viz-lstm-max",
-        "LSTM 时序检测",
-        "序列未就绪",
-        "当前流量未形成可预测时序序列",
-        "neutral",
-      );
-    } else if (lstmCompleted) {
-      setKpiPresentation(
-        "viz-lstm-max",
-        "LSTM 时序检测",
-        "未发现异常",
-        `已完成 ${lstmStatus.total_connections} 个通信组的时序检测`,
-        "positive",
-      );
-    }
-
-    if (!attributionTriggered && !list.length) {
-      setKpiPresentation(
-        "viz-rag-confidence",
-        "威胁归因",
-        "未触发",
-        "未发现可归因威胁行为",
-        "positive",
-      );
-    }
+    setValue("viz-lstm-note", hasLstmValue ? (maxLstm >= 80 ? "高置信异常" : maxLstm >= 50 ? "中等置信异常" : "低置信异常") : lstmStatusNote);
+    setValue("viz-rag-note", attributionConfidence == null ? attributionStatusNote : (attributionConfidence >= 70 ? "较高归因可信度" : attributionConfidence >= 40 ? "中等归因可信度" : "低归因可信度"));
 
     const dualEngineCount = list.filter((item) => ["RITA", "LSTM"].every((engine) => (item.detection_sources || []).includes(engine))).length;
     const target = primary ? `${primary.src_ip || "-"} → ${primary.dst_ip || "-"}:${primary.dst_port || "-"}` : "当前样本";

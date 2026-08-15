@@ -458,27 +458,6 @@
     font-size: 12px
 }
 
-.overview-kpi-status strong {
-    font-size: 26px
-}
-
-.overview-kpi-status-neutral {
-    border-color: #cbd5e1;
-    background: linear-gradient(135deg, #f8fafc 0%, #fff 100%)
-}
-
-.overview-kpi-status-neutral strong {
-    color: #334155
-}
-
-.overview-kpi-status-positive strong {
-    color: #047857
-}
-
-.overview-kpi-status-positive small {
-    color: #5b7180
-}
-
 .overview-conclusion {
     display: grid;
     grid-template-columns: 42px minmax(0, 1fr);
