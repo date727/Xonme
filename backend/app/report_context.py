@@ -157,20 +157,22 @@ def _rita_risk_label(row: dict[str, str]) -> str:
     return "未达到 Beacon 风险告警阈值"
 
 
-def _attribution(rag_results: list[dict] | None, applicable: bool) -> dict[str, Any]:
+def _attribution(
+    rag_results: list[dict] | None,
+    applicable: bool,
+    sample_techniques: list[dict[str, str]],
+) -> dict[str, Any]:
     if not applicable:
         return {
             "status": "not_applicable",
-            "conclusion": "本次未形成待归因的高风险通信实体，未触发攻击组织关联分析。",
-            "candidate": None,
-            "techniques": [],
+            "conclusion": "当前未发现与已知攻击活动相关的明显行为特征或组织关联线索。",
+            "candidates": [],
         }
     if not rag_results:
         return {
             "status": "analysis_unavailable",
             "conclusion": "未获得可用于组织关联的检索结果；这不影响本次通信风险结论。",
-            "candidate": None,
-            "techniques": [],
+            "candidates": [],
         }
 
     result = rag_results[0]
@@ -179,35 +181,32 @@ def _attribution(rag_results: list[dict] | None, applicable: bool) -> dict[str, 
         return {
             "status": "no_candidate",
             "conclusion": "未检索到与当前行为具有可解释关联的攻击组织画像。",
-            "candidate": None,
-            "techniques": [],
+            "candidates": [],
         }
-
-    primary = candidates[0]
-    score = float(primary.get("score") or 0)
-    runner_up = float(candidates[1].get("score") or 0) if len(candidates) > 1 else 0.0
-    details = (primary.get("metadata") or {}).get("matched_technique_details") or []
-    # A named group is a high-impact claim.  Require a strong retrieval match,
-    # separation from the next candidate, and more than one direct technique link.
-    confirmed = score >= 0.65 and score - runner_up >= 0.10 and len(details) >= 2
-    if not confirmed:
-        return {
-            "status": "limited_association",
-            "conclusion": "系统已完成组织画像关联分析，但当前行为与多个已知画像仅存在有限重合，候选之间缺乏足够区分度；为避免误导，不在本报告中展示具体组织名称。",
-            "candidate": None,
-            "techniques": [],
-        }
-
-    metadata = primary.get("metadata") or {}
+    sample_ids = {item["id"] for item in sample_techniques}
+    display_candidates = []
+    for item in candidates[:3]:
+        metadata = item.get("metadata") or {}
+        details = metadata.get("matched_technique_details") or []
+        matching = []
+        for detail in details:
+            technique_id = str(detail.get("id") or "")
+            if technique_id and technique_id in sample_ids:
+                matching.append(detail.get("name_zh") or detail.get("name") or technique_id)
+        matching = list(dict.fromkeys(matching))
+        display_candidates.append({
+            "name": _value(item.get("name")),
+            "association": f"{float(item.get('score') or 0) * 100:.1f}%",
+            "background": _value(
+                metadata.get("background_zh") or metadata.get("background"),
+                "知识库未提供中文背景说明",
+            ),
+            "matching_behaviors": "、".join(matching) if matching else "当前网络证据与该组织画像存在有限通信行为相似性。",
+        })
     return {
         "status": "candidate_association",
-        "conclusion": "当前证据形成了具备区分度的候选组织关联，但仍需结合终端、恶意文件和基础设施证据复核，不能据此作确认性归因。",
-        "candidate": {
-            "name": _value(primary.get("name")),
-            "confidence": f"{score * 100:.1f}%",
-            "background": _value(metadata.get("background_zh") or metadata.get("background"), "知识库未提供中文背景说明"),
-        },
-        "techniques": details[:3],
+        "conclusion": "候选结果反映当前行为与知识库组织画像的相似程度，仅用于辅助研判，不构成对攻击组织身份的确认。",
+        "candidates": display_candidates,
     }
 
 
@@ -284,9 +283,9 @@ def build_report_context(
     elif lstm["state"] == "normal":
         benign_evidence.append({"finding": "时序检测未告警", "evidence": lstm["text"], "meaning": "本次未观察到达到模型阈值的自动化 Beacon 特征。"})
 
-    applicable = decision["classification"] == "malicious_c2"
-    attribution = _attribution(rag_results, applicable)
     techniques = _techniques(mismatches, http_records)
+    applicable = decision["classification"] == "malicious_c2"
+    attribution = _attribution(rag_results, applicable, techniques)
     recommendations = (
         [
             "限制源主机与可疑目标之间的通信，并保全本次流量和相关日志。",
@@ -346,10 +345,11 @@ def format_report_context(context: dict[str, Any]) -> str:
             lines.append(f"- {item['id']}｜{item['name']}｜{item['meaning']}")
     attribution = context["attribution"]
     lines.append(f"组织关联结论：{attribution['conclusion']}")
-    if attribution.get("candidate"):
-        candidate = attribution["candidate"]
-        lines.append(f"允许展示的候选组织：{candidate['name']}（关联评分：{candidate['confidence']}）")
-        lines.append(f"知识库背景：{candidate['background']}")
+    for candidate in attribution.get("candidates", []):
+        lines.append(
+            f"候选组织：{candidate['name']}｜画像关联度：{candidate['association']}｜"
+            f"中文背景：{candidate['background']}｜重合行为：{candidate['matching_behaviors']}"
+        )
     lines.append("处置建议：")
     lines.extend(f"- {item}" for item in context["recommendations"])
     return "\n".join(lines)

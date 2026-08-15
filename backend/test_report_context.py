@@ -16,7 +16,7 @@ SMASHBURGER_SHA = "efc052a8172d7d76a34be5c98843278f3885b0e04494248093df753a89d5c
 
 
 class ReportContextTests(unittest.TestCase):
-    def test_malicious_report_keeps_evidence_and_hides_weak_group_names(self) -> None:
+    def test_malicious_report_keeps_evidence_and_shows_candidate_groups(self) -> None:
         logs = [[{
             "id.orig_h": "192.168.56.101", "id.resp_h": "192.168.56.4",
             "id.resp_p": "80", "host": "www.amazon.com",
@@ -31,15 +31,16 @@ class ReportContextTests(unittest.TestCase):
                 lstm_results={"status": "completed", "total_flagged": 1, "beacons": [{"confidence": 100, "risk": "Critical"}]},
                 rita_ok=True,
                 rag_results=[{"candidates": [
-                    {"name": "APT42", "score": 0.547, "metadata": {"matched_technique_details": [{"id": "T1071.001"}]}},
-                    {"name": "APT39", "score": 0.514, "metadata": {}},
+                    {"name": "APT42", "score": 0.547, "metadata": {"background_zh": "中文组织背景", "matched_technique_details": [{"id": "T1071.001", "name_zh": "应用层协议：Web 协议"}]}},
+                    {"name": "APT39", "score": 0.514, "metadata": {"background_zh": "中文组织背景"}},
                 ]}],
             )
             packet = format_report_context(context)
             self.assertEqual(context["decision"]["risk_level"], "高危")
-            self.assertEqual(context["attribution"]["status"], "limited_association")
+            self.assertEqual(context["attribution"]["status"], "candidate_association")
             self.assertIn("Host 为 `www.amazon.com`", packet)
-            self.assertNotIn("APT42", packet)
+            self.assertIn("APT42", packet)
+            self.assertIn("画像关联度：54.7%", packet)
 
     def test_benign_report_explains_normal_tls_and_skips_attribution(self) -> None:
         logs = [[], [{
@@ -60,6 +61,10 @@ class ReportContextTests(unittest.TestCase):
             packet = format_report_context(context)
             self.assertEqual(context["decision"]["risk_level"], "低危")
             self.assertEqual(context["attribution"]["status"], "not_applicable")
+            self.assertEqual(
+                context["attribution"]["conclusion"],
+                "当前未发现与已知攻击活动相关的明显行为特征或组织关联线索。",
+            )
             self.assertIn("smashburger.com", packet)
             self.assertIn("RITA 风险判定为“未达到 Beacon 风险告警阈值”", packet)
             self.assertIn("LSTM 未参与本次评估", packet)
