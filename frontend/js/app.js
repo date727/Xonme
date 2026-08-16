@@ -84,6 +84,12 @@ let activeController = null;
 let activeAnalysisId = null;
 let displayedAnalysisId = null;
 let latestVisualization = null;
+// Keep a completed detection-center task separate from the record currently
+// being viewed in the data center. A background completion must never replace
+// a user's selected historical analysis.
+let currentTaskVisualization = null;
+let currentTaskAnalysis = null;
+let currentTaskReportMarkdown = "";
 const HISTORY_PAGE_SIZE = 10;
 let historyPage = 1;
 let historyKeyword = "";
@@ -872,26 +878,25 @@ const handleStreamEvent = (eventName, data) => {
 
   if (eventName === "delta") {
     const payload = JSON.parse(data);
-    latestReportMarkdown += payload.content || "";
-    resultEl.innerHTML = renderMarkdown(latestReportMarkdown);
+    currentTaskReportMarkdown += payload.content || "";
     return;
   }
 
   if (eventName === "result") {
     const payload = JSON.parse(data);
     const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
-    latestReportMarkdown = markdown;
-    resultEl.innerHTML = renderMarkdown(markdown);
-    setReportDownloadEnabled(true);
-    latestVisualization = payload.visualization || null;
-    window.C2SherlockVisualization?.render(latestVisualization, {
+    currentTaskReportMarkdown = markdown;
+    currentTaskVisualization = payload.visualization || null;
+    currentTaskAnalysis = {
       original_filename: selectedFile?.name || payload.display_name,
       file_size: selectedFile?.size,
       status: "completed",
       completed_at: new Date().toISOString(),
       report_markdown: markdown,
-    });
-    setCurrentDataAvailable(Boolean(latestVisualization));
+    };
+    // Completion enables the detection-center detail button only. It must not
+    // overwrite the historical task currently displayed in the data center.
+    setCurrentDataAvailable(Boolean(currentTaskVisualization));
     markAllDone();
     setStatus("分析完成。");
     return;
@@ -937,12 +942,11 @@ const analyzeSelectedFile = async () => {
   window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
 
   setStatus("正在上传样本，请勿关闭页面。切换栏目不会中断当前分析。");
-  latestReportMarkdown = "";
-  latestVisualization = null;
+  currentTaskReportMarkdown = "";
+  currentTaskVisualization = null;
+  currentTaskAnalysis = null;
   setCurrentDataAvailable(false);
-  setReportDownloadEnabled(false);
   setReportVisible(false);
-  resultEl.textContent = "分析任务运行中，报告将实时显示...";
   resetSteps();
 
   const formData = new FormData();
@@ -984,19 +988,19 @@ const analyzeSelectedFile = async () => {
     }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      latestReportMarkdown = "";
-      setReportDownloadEnabled(false);
+      currentTaskReportMarkdown = "";
+      currentTaskVisualization = null;
+      currentTaskAnalysis = null;
       setReportVisible(false);
-      resultEl.textContent = "分析已取消。可以重新选择 PCAP 文件并开始新的分析。";
       setStatus("分析已取消，可重新开始或上传新文件。");
       clearActiveStep();
       return;
     }
     const message = error instanceof Error ? error.message : "分析请求失败";
-    latestReportMarkdown = "";
-    setReportDownloadEnabled(false);
+    currentTaskReportMarkdown = "";
+    currentTaskVisualization = null;
+    currentTaskAnalysis = null;
     setReportVisible(false);
-    resultEl.textContent = "分析失败，请检查后端地址、网络连通性和后端日志。";
     setStatus(message, true);
     markError(currentStep);
   } finally {
@@ -1500,9 +1504,14 @@ setupAnalysisHistory();
 setupAuthentication();
 setReportVisible(false);
 openCurrentDataBtn?.addEventListener("click", () => {
-  if (!latestVisualization) return;
+  if (!currentTaskVisualization || !currentTaskAnalysis) return;
+  latestVisualization = currentTaskVisualization;
+  latestReportMarkdown = currentTaskReportMarkdown;
+  displayedAnalysisId = null;
+  if (resultEl) resultEl.innerHTML = renderMarkdown(latestReportMarkdown);
+  setReportDownloadEnabled(Boolean(latestReportMarkdown));
   switchTab("capability", { push: true });
-  window.C2SherlockVisualization?.render(latestVisualization);
+  window.C2SherlockVisualization?.render(currentTaskVisualization, currentTaskAnalysis);
 });
 analyzeBtn.addEventListener("click", analyzeSelectedFile);
 cancelBtn?.addEventListener("click", cancelAnalysis);

@@ -54,6 +54,29 @@ class ThreatFeatureMergerTests(unittest.TestCase):
         self.assertEqual(merged[0]["detection_sources"], ["RITA", "LSTM"])
         self.assertEqual(merged[0]["protocol"], "tcp")
 
+    def test_lstm_critical_promotes_existing_rita_low_risk(self):
+        rita = [{
+            "src_ip": "192.168.56.5",
+            "dst_ip": "192.168.56.4",
+            "dst_port": "80",
+            "protocol": "tcp",
+            "threat_category": "low",
+        }]
+        lstm = {"beacons": [{
+            "src": "192.168.56.5",
+            "dst": "192.168.56.4",
+            "port": "80",
+            "proto": "tcp",
+            "confidence": 100.0,
+            "risk": "Critical",
+        }]}
+
+        merged = merge_threat_features(rita, lstm)
+
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0]["threat_category"], "high")
+        self.assertEqual(merged[0]["lstm_risk"], "Critical")
+
 
 if __name__ == "__main__":
     unittest.main()

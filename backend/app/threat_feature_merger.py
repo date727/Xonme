@@ -121,14 +121,16 @@ class ThreatFeatureMerger:
                 feature['detection_sources'].append('LSTM')
                 
                 # 如果 RITA 没标记但 LSTM 标记了，提升威胁等级
-                if 'RITA' not in feature['detection_sources']:
-                    # 根据 LSTM 置信度推断威胁等级
-                    if lstm_feature.get('confidence', 0) >= 90:
-                        feature['threat_category'] = 'high'
-                    elif lstm_feature.get('confidence', 0) >= 75:
-                        feature['threat_category'] = 'medium'
-                    else:
-                        feature['threat_category'] = 'low'
+                # The summary risk always uses the stronger engine result.
+                # This prevents a RITA-low / LSTM-Critical connection from
+                # being displayed as a low-risk connection.
+                lstm_category = self._lstm_threat_category(
+                    lstm_feature.get('confidence', 0)
+                )
+                if self._threat_priority(lstm_category) < self._threat_priority(
+                    feature['threat_category']
+                ):
+                    feature['threat_category'] = lstm_category
             else:
                 feature.update({
                     'lstm_confidence': 0.0,
@@ -246,6 +248,19 @@ class ThreatFeatureMerger:
             'unknown': 4,
         }
         return priority_map.get(category.lower(), 5)
+
+    @staticmethod
+    def _lstm_threat_category(confidence: float | int | None) -> str:
+        """Map LSTM confidence to the public fused-risk scale."""
+        try:
+            value = float(confidence or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value >= 90:
+            return 'high'
+        if value >= 75:
+            return 'medium'
+        return 'low'
 
 
 def merge_threat_features(
