@@ -1369,6 +1369,7 @@ const loadSession = async () => {
     currentUser = null;
   }
   sessionResolved = true;
+  document.documentElement.classList.remove("auth-pending");
   renderAccount();
   if (currentUser) void loadAnalysisHistory();
   const routeState = getHashState();
