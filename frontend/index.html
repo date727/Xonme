@@ -318,7 +318,7 @@
     <section id="collector" class="tab-page" data-page="collector">
       <div class="collector-shell">
         <header class="collector-hero panel">
-          <div><span class="collector-kicker">LIVE TRAFFIC MONITORING</span><h1>在线流量监测</h1><p>持续采集本机网络流量并同步至云端，实时识别可疑连接；仅在发现威胁时生成检测记录与 AI 研判报告。</p></div>
+          <div><span class="collector-kicker">LIVE TRAFFIC MONITORING</span><h1>在线流量监测</h1><p>持续采集本机网络流量并同步至云端，实时识别可疑连接。</p></div>
           <div id="collector-overall-state" class="collector-state-badge offline"><i></i><span>正在检查本地环境</span></div>
         </header>
         <div class="collector-stage-strip" aria-label="在线监测步骤"><div class="active" data-collector-stage="environment"><b>1</b><span>环境检查</span></div><div data-collector-stage="config"><b>2</b><span>检测配置</span></div><div data-collector-stage="capture"><b>3</b><span>采集与同步</span></div><div data-collector-stage="analysis"><b>4</b><span>实时检测</span></div><div data-collector-stage="result"><b>5</b><span>检测结果</span></div></div>
@@ -337,16 +337,16 @@
             <div class="collector-form-grid">
               <label class="field"><span>检测网卡</span><select id="collector-interface" disabled><option value="">请先完成环境检查</option></select></label>
               <label class="field"><span>报告模型</span><select id="collector-model"><option value="deepseek-v4-flash">DeepSeek V4 Flash</option><option value="qwen-3-6">Qwen 3.6</option><option value="glm-5-2">GLM 5.2</option><option value="gpt-5-5">GPT-5.5</option></select></label>
-              <label class="field full"><span>监测时长</span><select id="collector-duration"><option value="3600" selected>手动停止（最长 1 小时）</option><option value="300">5 分钟后自动停止</option><option value="600">10 分钟后自动停止</option><option value="1800">30 分钟后自动停止</option></select><small>选择手动停止后，可随时点击“停止监测并生成结论”；1 小时为当前采集器的安全保护上限。</small></label>
+              <label class="field full"><span>监测方式</span><select id="collector-duration"><option value="3600" selected>持续监测（手动停止）</option><option value="300">5 分钟快速检测</option><option value="600">10 分钟标准检测</option><option value="1800">30 分钟深度检测</option></select><small>持续监测期间，可随时点击“停止监测并生成结论”。</small></label>
             </div>
             <details class="collector-advanced-settings">
               <summary>高级设置</summary>
               <div class="collector-advanced-body">
                 <label class="field"><span>抓包过滤规则（BPF）</span><input id="collector-filter" type="text" maxlength="512" value="tcp or udp" autocomplete="off"><small>默认只采集 TCP 和 UDP 流量。</small></label>
-                <div class="collector-cache-note"><strong>本地缓存保护</strong><p>新版边采边传启用后由采集器自动管理：已同步数据及时释放；网络中断时，未同步数据保留在本机并自动重试。</p></div>
+                <div class="collector-cache-note"><strong>本地缓存保护</strong><p>已同步数据及时释放；网络中断时，未同步数据保留在本机并自动重试。</p></div>
               </div>
             </details>
-            <p class="collector-model-note">仅在发现可疑连接时，才调用所选模型生成研判报告。</p>
+            <p class="collector-model-note">检测结果将结合规则引擎、LSTM、RAG 与所选模型完成综合研判。</p>
             <p id="collector-message" class="status" role="status">环境就绪后即可开始在线监测。</p><div class="collector-actions"><button id="collector-start-btn" class="primary" type="button" disabled>开始在线监测</button><button id="collector-stop-btn" class="secondary danger" type="button" disabled>停止监测并生成结论</button></div>
           </section>
         </div>
@@ -374,7 +374,7 @@
           </section>
 
           <section id="collector-full-analysis" class="collector-full-analysis">
-            <div class="collector-analysis-head"><div><h3>完整分析</h3><p id="collector-analysis-note">发现可疑连接后，将在停止监测并完成同步后生成 AI 研判报告。</p></div></div>
+            <div class="collector-analysis-head"><div><h3>完整分析</h3><p id="collector-analysis-note">停止监测并完成同步后，系统将汇总检测证据并生成智能研判报告。</p></div></div>
             <ol id="collector-analysis-steps" class="steps collector-analysis-steps"><li data-step="zeek"><span>日志解析</span></li><li data-step="rita"><span>规则引擎</span></li><li data-step="lstm"><span>LSTM 时序检测</span></li><li data-step="rag"><span>RAG 溯源归因</span></li><li data-step="ai"><span>大模型研判</span></li></ol>
           </section>
         </section>
