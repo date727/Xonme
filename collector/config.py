@@ -21,17 +21,14 @@ def _bundled_settings() -> dict:
         roots.append(Path(bundle_root))
     roots.append(Path(__file__).resolve().parent)
     for root in roots:
-        candidates = [root / "config.json"]
-        if root.name.lower() == "collector":
-            candidates.append(root / "config.json.example")
-        for path in candidates:
-            if not path.is_file():
-                continue
-            try:
-                value = json.loads(path.read_text(encoding="utf-8"))
-                return value if isinstance(value, dict) else {}
-            except (OSError, json.JSONDecodeError):
-                return {}
+        path = root / "config.json"
+        if not path.is_file():
+            continue
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
     return {}
 
 
