@@ -52,6 +52,9 @@ class User(Base):
     analyses: Mapped[list["AnalysisRecord"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    collector_sessions: Mapped[list["CollectorSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class AnalysisRecord(Base):
@@ -74,6 +77,57 @@ class AnalysisRecord(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     user: Mapped[User] = relationship(back_populates="analyses")
+
+
+class CollectorSession(Base):
+    """One browser-created upload slot used by the Windows collector."""
+
+    __tablename__ = "collector_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        PRIMARY_KEY_TYPE, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    upload_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    token_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    upload_consumed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="awaiting_upload", index=True)
+    current_step: Mapped[str | None] = mapped_column(String(24))
+    model_id: Mapped[str | None] = mapped_column(String(80))
+    analysis_record_id: Mapped[int | None] = mapped_column(
+        PRIMARY_KEY_TYPE, ForeignKey("analysis_records.id", ondelete="SET NULL"), index=True
+    )
+    original_filename: Mapped[str | None] = mapped_column(String(255))
+    storage_path: Mapped[str | None] = mapped_column(Text)
+    file_size: Mapped[int | None] = mapped_column(BigInteger)
+    sha256: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=local_database_time)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=local_database_time, onupdate=local_database_time
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    user: Mapped[User] = relationship(back_populates="collector_sessions")
+    events: Mapped[list["CollectorEvent"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="CollectorEvent.id"
+    )
+
+
+class CollectorEvent(Base):
+    """Persisted SSE event so reconnecting browsers can resume progress."""
+
+    __tablename__ = "collector_events"
+
+    id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("collector_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=local_database_time)
+
+    session: Mapped[CollectorSession] = relationship(back_populates="events")
 
 
 def create_database_engine():

@@ -289,6 +289,49 @@ curl -X POST http://127.0.0.1:8765/analyze \
   -F "pcap=@sample.pcap"
 ```
 
+## Windows 在线采集检测
+
+在线采集不会让浏览器直接访问网卡。Windows 用户安装 Wireshark（安装时保留 Npcap）并运行本仓库 `collector/` 打包出的 `C2Sherlock-Collector.exe`：
+
+```text
+网页 → 127.0.0.1:8766 → dumpcap.exe → PCAPNG → FastAPI 8765 → 完整分析流水线
+```
+
+本地控制器只监听回环地址，负责环境检查、网卡枚举、启动/停止 dumpcap、文件 SHA-256 校验、上传失败重试和成功后的临时文件清理。它不实现抓包算法。开发、配置和打包说明见 `collector/README.md`。
+
+云端继续复用现有后端端口 `8765`，新增接口如下：
+
+```text
+POST /collector/sessions
+POST /collector/sessions/{session_id}/pcap
+GET  /collector/sessions/{session_id}/events
+GET  /collector/sessions/{session_id}
+```
+
+在线采集要求用户登录。网页创建会话后获得一次性上传令牌，控制器只能向对应会话上传一个最大 100 MB 的 PCAP/PCAPNG；上传完成后，云端复用现有 Zeek、RITA、LSTM、RAG 与 AI 报告流程。
+
+正式部署时设置：
+
+```dotenv
+MAX_PCAP_BYTES=104857600
+COLLECTOR_TOKEN_TTL_SECONDS=1800
+COLLECTOR_ANALYSIS_WORKERS=1
+```
+
+控制器发布配置示例（复制 `collector/config.json.example` 为 `collector/config.json`）：
+
+```json
+{
+  "cloud_api_base": "http://你的云服务器:8765",
+  "allowed_origins": "http://你的云服务器:5500",
+  "collector_port": 8766
+}
+```
+
+该配置会在 Windows 打包时固化进 EXE，最终用户不需要设置环境变量。
+
+云服务器无需开放新的端口；本地 `8766` 不得绑定到 `0.0.0.0`。首次部署更新代码后，需要确保 `DATABASE_URL` 已配置，应用启动时会创建缺失的采集会话表。
+
 实时进度接口：
 
 ```bash

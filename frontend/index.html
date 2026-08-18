@@ -6,6 +6,12 @@
   <title>C2Sherlock 可视化分析平台</title>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/visualization.css" />
+  <link rel="stylesheet" href="styles/collector.css" />
+  <style>
+    /* Keep protected content hidden until the session check has completed. */
+    html.auth-pending body { visibility: hidden; }
+  </style>
+  <script>document.documentElement.classList.add("auth-pending");</script>
 </head>
 <body>
   <header class="topbar">
@@ -20,6 +26,7 @@
       <button class="nav-btn active" data-tab="home"><span class="nav-icon">⌂</span>首页</button>
       <button class="nav-btn" data-tab="principle"><span class="nav-icon">□</span>原理</button>
       <button class="nav-btn" data-tab="tool"><span class="nav-icon">▷</span>检测中心</button>
+      <button class="nav-btn" data-tab="collector"><span class="nav-icon">◎</span>在线采集</button>
       <button class="nav-btn" data-tab="capability"><span class="nav-icon">▥</span>数据中心</button>
       <button class="nav-btn" data-tab="profile"><span class="nav-icon">◌</span>个人中心</button>
     </nav>
@@ -306,6 +313,43 @@
         <div class="result-head"><div><h2>分析报告</h2></div><div class="report-actions" aria-label="分析报告下载"><select id="report-format" aria-label="选择报告格式"><option value="md">.md</option><option value="docx">.docx</option><option value="pdf">.pdf</option></select><button id="download-report-btn" class="report-download" type="button" disabled>下载</button><button id="print-report-btn" class="report-print" type="button" disabled>打印</button></div></div>
         <div id="result" class="result report-document">分析任务运行中，报告将实时显示在这里。</div>
       </section>
+    </section>
+
+    <section id="collector" class="tab-page" data-page="collector">
+      <div class="collector-shell">
+        <header class="collector-hero panel">
+          <div><span class="collector-kicker">WINDOWS LOOPBACK COLLECTOR</span><h1>在线采集检测</h1><p>在用户明确授权后，由本机控制器调用 Wireshark 的 dumpcap 抓取流量，停止后自动上传云端完成全量分析。</p></div>
+          <div id="collector-overall-state" class="collector-state-badge offline"><i></i><span>正在检查本地环境</span></div>
+        </header>
+        <div class="collector-stage-strip" aria-label="在线采集步骤"><div class="active" data-collector-stage="environment"><b>1</b><span>环境检查</span></div><div data-collector-stage="config"><b>2</b><span>采集配置</span></div><div data-collector-stage="capture"><b>3</b><span>正在采集</span></div><div data-collector-stage="analysis"><b>4</b><span>云端分析</span></div><div data-collector-stage="result"><b>5</b><span>结果报告</span></div></div>
+        <div class="collector-grid">
+          <section class="panel collector-card">
+            <div class="collector-card-head"><div><span class="collector-step-number">01</span><h2>环境检查</h2></div><button id="collector-recheck-btn" class="secondary" type="button">重新检测</button></div>
+            <div class="environment-list">
+              <div class="environment-item"><span id="collector-app-indicator" class="environment-indicator pending">…</span><div><strong>本地采集控制器</strong><p id="collector-app-status">正在连接 127.0.0.1:8766</p></div></div>
+              <div class="environment-item"><span id="collector-dumpcap-indicator" class="environment-indicator pending">…</span><div><strong>Wireshark dumpcap</strong><p id="collector-dumpcap-status">等待控制器检查</p></div></div>
+              <div class="environment-item"><span id="collector-npcap-indicator" class="environment-indicator pending">…</span><div><strong>Npcap 与网卡权限</strong><p id="collector-npcap-status">等待控制器检查</p></div></div>
+            </div>
+            <div id="collector-install-guide" class="collector-install-guide" hidden><strong>首次使用准备</strong><ol><li>安装 Wireshark，安装过程中保留 Npcap 组件。</li><li>下载并运行 C2Sherlock 本地采集控制器。</li><li>返回本页点击“重新检测”。采集时无需打开 Wireshark。</li></ol><div class="collector-guide-actions"><a class="primary button-link" href="https://www.wireshark.org/download.html" target="_blank" rel="noopener noreferrer">下载 Wireshark</a><a id="collector-download-link" class="secondary button-link" href="downloads/C2Sherlock-Collector.exe" download>下载采集控制器</a></div></div>
+          </section>
+          <section class="panel collector-card">
+            <div class="collector-card-head"><div><span class="collector-step-number">02</span><h2>采集配置</h2></div><span class="collector-default-note">推荐配置已预填</span></div>
+            <div class="collector-form-grid">
+              <label class="field"><span>采集网卡</span><select id="collector-interface" disabled><option value="">请先完成环境检查</option></select></label>
+              <label class="field"><span>报告模型</span><select id="collector-model"><option value="deepseek-v4-flash">DeepSeek V4 Flash</option><option value="qwen-3-6">Qwen 3.6</option><option value="glm-5-2">GLM 5.2</option><option value="gpt-5-5">GPT-5.5</option></select></label>
+              <label class="field full"><span>抓包过滤规则（BPF）</span><input id="collector-filter" type="text" maxlength="512" value="tcp or udp" autocomplete="off"></label>
+              <label class="field"><span>最大采集时长</span><select id="collector-duration"><option value="60">1 分钟</option><option value="300">5 分钟</option><option value="600">10 分钟</option></select></label>
+              <label class="field"><span>最大文件大小</span><select id="collector-max-size"><option value="50">50 MB</option><option value="100" selected>100 MB</option></select></label>
+            </div>
+            <p id="collector-message" class="status" role="status">环境就绪后即可开始采集。</p><div class="collector-actions"><button id="collector-start-btn" class="primary" type="button" disabled>开始采集</button><button id="collector-stop-btn" class="secondary danger" type="button" disabled>停止采集并分析</button></div>
+          </section>
+        </div>
+        <section class="panel collector-live-panel">
+          <div class="collector-live-title"><div><span class="collector-live-dot"></span><h2>任务状态</h2></div><button id="collector-open-data-btn" class="current-data-btn" type="button" disabled>查看详细数据</button></div>
+          <div class="collector-metrics"><article><span>当前状态</span><strong id="collector-live-status">等待开始</strong></article><article><span>采集时间</span><strong id="collector-elapsed">00:00:00</strong></article><article><span>已采集数据</span><strong id="collector-bytes">0 B</strong></article><article><span>云端会话</span><strong id="collector-session-label">尚未创建</strong></article></div>
+          <ol id="collector-analysis-steps" class="steps collector-analysis-steps"><li data-step="zeek"><span>日志解析</span></li><li data-step="rita"><span>规则引擎</span></li><li data-step="lstm"><span>LSTM 时序检测</span></li><li data-step="rag"><span>RAG 溯源归因</span></li><li data-step="ai"><span>大模型研判</span></li></ol>
+        </section>
+      </div>
     </section>
 
     <section id="principle" class="tab-page" data-page="principle">
@@ -698,5 +742,6 @@
   <div id="case-toast" class="case-toast" hidden></div>
   <script src="js/visualization.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/collector.js"></script>
 </body>
 </html>

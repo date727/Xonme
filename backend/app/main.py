@@ -41,6 +41,7 @@ from app.database import (
     delete_analysis_record_for_user,
     finish_analysis_record,
     get_analysis_record_for_user,
+    initialise_database,
     list_analysis_records,
 )
 from app.auth import (
@@ -49,6 +50,9 @@ from app.auth import (
     initialise_session_secret,
     router as auth_router,
 )
+from app.report_context import build_report_context, format_report_context
+from app.collector_routes import router as collector_router
+from app.collector_service import recover_interrupted_sessions
 
 # LSTM beacon detection - gracefully degrades if dependencies are missing
 try:
@@ -80,11 +84,15 @@ ARTIFACT_SCHEMA_VERSION = 1
 
 app = FastAPI()
 app.include_router(auth_router)
+app.include_router(collector_router)
 
 
 @app.on_event("startup")
 async def initialise_auth_secret() -> None:
     initialise_session_secret()
+    if os.getenv("DATABASE_URL"):
+        initialise_database()
+        recover_interrupted_sessions()
 
 app.add_middleware(
     CORSMiddleware,
@@ -776,6 +784,7 @@ def _build_ai_request(
     model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    report_context: dict | None = None,
     stream: bool = False,
 ) -> tuple[str, dict[str, str], dict]:
     url = get_chat_completions_url(model_config)
@@ -784,39 +793,39 @@ def _build_ai_request(
         "Content-Type": "application/json",
     }
 
-    source = "RITA CSV report" if rita_ok else "Zeek network log data"
     system_prompt = (
-        "你是一名资深网络威胁分析师。"
-        "请始终使用中文回答，并输出专业的 Markdown 报告。"
+        "你是一名面向客户交付报告的资深网络威胁分析师。请始终使用中文，"
+        "将事实包转化为清晰、专业、可审计的 Markdown 安全研判报告。"
+        "事实包是唯一事实来源；不得编造 IOC、日志字段、攻击组织、ATT&CK 技术、"
+        "攻击阶段或主机行为。不得向读者提及事实包、后端、模型输入、演示样本或标签。"
+    )
+    brief = format_report_context(report_context) if report_context else (
+        "## 后端已核验的报告简报\n"
+        "- 本次未提供结构化报告简报；仅可根据下方检测输入谨慎说明。"
     )
     prompt = (
-        "请输出一份中文 Markdown 报告，且第一行标题必须严格为："
+        "请仅根据以下报告简报生成报告。第一行标题必须严格为："
         "# C2Sherlock AI分析报告\n\n"
-        f"请分析以下{source}，并按下面结构组织内容：\n"
-        "1. **执行摘要** - 用 2-3 句话概括核心发现\n"
-        "2. **主要威胁特征** - 说明可疑 C2 行为、Beacon 特征、异常现象\n"
-        "3. **风险评估** - 说明严重性、潜在影响与业务风险\n"
-        "4. **处置建议** - 给出面向 SOC 团队的具体下一步措施\n\n"
+        "报告必须严格包含以下五个二级标题，且不得新增同级章节：\n"
+        "## 一. 执行摘要\n"
+        "## 二. 关键通信特征\n"
+        "## 三. 风险评估\n"
+        "## 四. 处置建议\n"
+        "## 五. 溯源归因\n\n"
+        "写作硬规则：\n"
+        "- 执行摘要先用一句明确的综合判定开头，再用一段完整文字说明谁与谁通信、发现了什么、为何得出该结论及优先处置方向。执行摘要不得出现‘严重度未记录’、‘时序样本不足’、‘LSTM 未参与评估’、模型不可用或其他模块运行状态；这些内容仅在第 2 节说明。\n"
+        "- 第 2 节先输出‘通信画像’三列表格（项目、观测结果、说明），再输出‘关键证据’三列表格（发现、样本证据、安全含义）。无异常时使用正常性证据，不得硬凑威胁。\n"
+        "- 第 3 节必须依次说明风险理由、潜在影响和结论边界。模型评分只是检测依据，不能写成确定事实。\n"
+        "- 第 4 节按编号给出与样本匹配、可执行的处置建议。\n"
+        "- 对低风险样本：第 5 节只保留一段‘当前未发现与已知攻击活动相关的明显行为特征或组织关联线索。’不得再分行为、组织或补充证据小节，也不得解释模块是否触发。\n"
+        "- 对存在可疑通信的样本：第 5 节必须且只能包含三个三级标题：‘### 行为研判结论’、‘### 行为归因说明’、‘### 组织归因说明’。\n"
+        "- ‘行为研判结论’用一段话概括可疑通信行为及其证据；‘行为归因说明’用表格解释每个 ATT&CK 行为技术，必须包含中文名称、通俗含义和本样本证据。\n"
+        "- ‘组织归因说明’先写明‘候选组织关联（辅助研判，非确认结论）’，再用表格展示事实包提供的最多三个候选组织、画像关联度、中文背景说明和重合行为。画像关联度不是归因置信度，必须说明不能据此确认攻击组织身份。\n"
+        "- 只能展示事实包提供的候选组织及其重合行为；不得补充组织别名、恶意软件、攻击活动或候选排行之外的内容。\n"
+        "- LSTM 未形成序列只能说明本次未作为风险依据，不能当作良性证明。RITA 的 :: 只可视为聚合字段缺失，不能描述为真实目的地址异常。\n"
+        "- 避免逐项复述分数和原始字段；用‘发现—证据—含义’连接事实。\n\n"
+        f"{brief}\n"
     )
-    
-    if rag_context:
-        prompt += (
-            "\n以下是 ATT&CK 溯源上下文，请用于丰富分析：\n"
-            f"{rag_context}\n\n"
-            "请在报告中新增第 5 节“威胁归因”，至少包括：\n"
-            "- 最可能的 APT 组织或组织集合\n"
-            "- 对应的 MITRE ATT&CK 技术编号\n"
-            "- 你的置信度与需要保留的 caveat\n"
-        )
-
-    lstm_markdown = _fmt_lstm(lstm_results)
-    prompt += (
-        "\n以下是系统生成的 LSTM 时序检测结果。无论是否命中 C2，"
-        "请在报告中明确说明该检测结论；未命中不代表绝对安全：\n"
-        f"{lstm_markdown}\n"
-    )
-
-    prompt += f"\n原始分析输入如下：\n{csv_text}"
 
     payload = {
         "model": model_config.model,
@@ -841,6 +850,7 @@ def generate_ai_analysis(
     model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    report_context: dict | None = None,
 ) -> str:
     url, headers, payload = _build_ai_request(
         csv_text,
@@ -848,6 +858,7 @@ def generate_ai_analysis(
         model_config=model_config,
         rita_ok=rita_ok,
         rag_context=rag_context,
+        report_context=report_context,
         stream=False,
     )
 
@@ -876,6 +887,7 @@ def stream_ai_analysis(
     model_config: ModelConfig,
     rita_ok: bool = True,
     rag_context: str | None = None,
+    report_context: dict | None = None,
     job: AnalysisJob | None = None,
 ):
     _raise_if_cancelled(job)
@@ -886,6 +898,7 @@ def stream_ai_analysis(
             model_config=model_config,
             rita_ok=rita_ok,
             rag_context=rag_context,
+            report_context=report_context,
             stream=False,
         )
         response_payload = {
@@ -933,6 +946,7 @@ def stream_ai_analysis(
         model_config=model_config,
         rita_ok=rita_ok,
         rag_context=rag_context,
+        report_context=report_context,
         stream=True,
     )
 
@@ -1268,14 +1282,29 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
                 lstm_results = predict_beacons(lstm_csv_text)
             else:
                 print("LSTM: skipped (no usable TCP connection sequence found in PCAP)")
+                lstm_results = {
+                    "status": "insufficient_sequence",
+                    "reason": "No usable TCP connection sequence found in PCAP",
+                    "minimum_sequence_length": 10,
+                    "max_group_connections": 0,
+                    "beacons": [],
+                }
         except Exception as exc:
             print(f"LSTM: analysis failed - {exc}")
             import traceback
 
             traceback.print_exc()
 
+    if lstm_results is None:
+        lstm_results = {
+            "status": "unavailable" if not _LSTM_AVAILABLE else "failed",
+            "reason": "LSTM model is unavailable" if not _LSTM_AVAILABLE else "LSTM feature extraction failed",
+            "beacons": [],
+        }
+
     # Detection merging is independent from optional RAG attribution.
     rag_context = None
+    rag_results: list[dict] = []
     try:
         merged_features = _merge_detection_results(
             csv_text, rita_ok=rita_ok, lstm_results=lstm_results
@@ -1284,9 +1313,20 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         print(f"Detection merge: failed - {exc}")
         merged_features = []
     try:
-        rag_context, _ = _run_optional_attribution(merged_features)
+        _, rag_results = _run_optional_attribution(merged_features)
     except Exception as exc:
         print(f"RAG: failed - {exc}")
+
+    report_context = build_report_context(
+        csv_text=csv_text,
+        output_dir=output_dir,
+        sample_sha256=_file_sha256(upload_path),
+        sample_name=pcap.filename,
+        threats=merged_features,
+        lstm_results=lstm_results,
+        rita_ok=rita_ok,
+        rag_results=rag_results,
+    )
 
     analysis_markdown = generate_ai_analysis(
         csv_text,
@@ -1294,6 +1334,7 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         model_config=get_model_config(None),
         rita_ok=rita_ok,
         rag_context=rag_context,
+        report_context=report_context,
     )
 
     response = AnalyzeResponse(
@@ -1440,6 +1481,13 @@ async def analyze_pcap_stream(
                         _raise_if_cancelled(job)
                     else:
                         print("LSTM: skipped (no usable TCP connection sequence found in PCAP)")
+                        lstm_results = {
+                            "status": "insufficient_sequence",
+                            "reason": "No usable TCP connection sequence found in PCAP",
+                            "minimum_sequence_length": 10,
+                            "max_group_connections": 0,
+                            "beacons": [],
+                        }
                 except AnalysisCancelled:
                     raise
                 except Exception as exc:
@@ -1447,6 +1495,12 @@ async def analyze_pcap_stream(
                     import traceback
 
                     traceback.print_exc()
+            if lstm_results is None:
+                lstm_results = {
+                    "status": "unavailable" if not _LSTM_AVAILABLE else "failed",
+                    "reason": "LSTM model is unavailable" if not _LSTM_AVAILABLE else "LSTM feature extraction failed",
+                    "beacons": [],
+                }
             _write_json(
                 artifacts.lstm_dir / "result.json",
                 lstm_results
@@ -1457,7 +1511,7 @@ async def analyze_pcap_stream(
             )
             _append_runtime_log(
                 artifacts,
-                "LSTM completed" if lstm_results is not None else "LSTM skipped or failed",
+                "LSTM completed" if lstm_results.get("status") == "completed" else f"LSTM {lstm_results.get('status', 'unavailable')}",
             )
 
             yield sse_event("step", "rag")
@@ -1465,6 +1519,7 @@ async def analyze_pcap_stream(
             rag_context = None
             merged_features: list[dict] = []
             rag_result: dict | None = None
+            attribution_status = "no_threat"
             engine_results: dict = {
                 "rita": [],
                 "lstm": lstm_results or {"status": "skipped_or_failed", "beacons": []},
@@ -1500,15 +1555,24 @@ async def analyze_pcap_stream(
             except Exception as exc:
                 print(f"Engine display results: failed - {exc}")
 
+            rag_results: list[dict] = []
             try:
                 rag_context, rag_results = _run_optional_attribution(
                     merged_features, job=job
                 )
                 _raise_if_cancelled(job)
                 rag_result = rag_results[0] if rag_results else None
+                if merged_features:
+                    if not _RAG_AVAILABLE:
+                        attribution_status = "unavailable"
+                    elif rag_result and rag_result.get("candidates"):
+                        attribution_status = "completed"
+                    else:
+                        attribution_status = "no_candidate"
             except AnalysisCancelled:
                 raise
             except Exception as exc:
+                attribution_status = "failed"
                 print(f"RAG: failed - {exc}")
                 import traceback
 
@@ -1516,13 +1580,24 @@ async def analyze_pcap_stream(
             _write_json(artifacts.merged_dir / "threats.json", merged_features)
             _write_json(
                 artifacts.rag_dir / "result.json",
-                rag_result or {"status": "skipped_or_no_candidates"},
+                rag_result or {"status": attribution_status},
             )
             if rag_context:
                 (artifacts.rag_dir / "context.md").write_text(rag_context, encoding="utf-8")
             _append_runtime_log(
                 artifacts,
                 "RAG completed" if rag_result is not None else "RAG skipped or no candidates",
+            )
+
+            report_context = build_report_context(
+                csv_text=csv_text,
+                output_dir=output_dir,
+                sample_sha256=sha256,
+                sample_name=pcap.filename,
+                threats=merged_features,
+                lstm_results=lstm_results,
+                rita_ok=rita_ok,
+                rag_results=rag_results,
             )
 
             yield sse_event("step", "ai")
@@ -1534,6 +1609,7 @@ async def analyze_pcap_stream(
                 model_config=model_config,
                 rita_ok=rita_ok,
                 rag_context=rag_context,
+                report_context=report_context,
                 job=job,
             ):
                 chunks.append(delta)
@@ -1553,13 +1629,15 @@ async def analyze_pcap_stream(
                 "display_name": artifacts.display_name,
                 "engine_status": {
                     "rita_available": rita_ok,
-                    "lstm_completed": lstm_results is not None,
-                    "rag_completed": rag_result is not None,
+                    "lstm_completed": lstm_results.get("status") == "completed",
+                    "rag_completed": attribution_status == "completed",
                 },
                 "threats": merged_features,
                 "engine_results": engine_results,
                 "attribution": rag_result,
-                "lstm": lstm_results or {"status": "skipped_or_failed", "beacons": []},
+                "attribution_status": attribution_status,
+                "report_decision": report_context["decision"],
+                "lstm": lstm_results,
                 "rita": {
                     "available": rita_ok,
                     "database": rita_db_name,
@@ -1594,6 +1672,7 @@ async def analyze_pcap_stream(
                     "display_name": artifacts.display_name,
                     "analysis_markdown": analysis_markdown,
                     "visualization": dashboard,
+                    "analysis_record_id": record_id,
                 },
                 ensure_ascii=False,
             )
