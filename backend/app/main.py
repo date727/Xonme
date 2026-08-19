@@ -52,6 +52,7 @@ from app.auth import (
 )
 from app.collector_routes import router as collector_router
 from app.collector_service import recover_interrupted_sessions
+from app.stream_lifecycle import run_stream_in_background as _run_stream_in_background
 
 # LSTM beacon detection - gracefully degrades if dependencies are missing
 try:
@@ -163,6 +164,7 @@ class AnalysisJob:
     cancel_event: threading.Event = field(default_factory=threading.Event)
     processes: set[subprocess.Popen] = field(default_factory=set)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    record_id: int | None = None
 
 
 ACTIVE_ANALYSES: dict[str, AnalysisJob] = {}
@@ -1163,6 +1165,50 @@ async def get_saved_analysis_dashboard(
     }
 
 
+@app.get("/analyses/{record_id}/status")
+async def get_saved_analysis_status(
+    record_id: int, user: User = Depends(get_current_user)
+) -> dict:
+    """Return a lightweight, refresh-safe state for one owned analysis."""
+
+    record = get_analysis_record_for_user(record_id, user.id)
+    if not record:
+        raise HTTPException(status_code=404, detail="未找到该分析任务")
+    return {
+        "id": record["id"],
+        "original_filename": record["original_filename"],
+        "file_size": record["file_size"],
+        "status": record["status"],
+        "created_at": record["created_at"],
+        "completed_at": record["completed_at"],
+    }
+
+
+@app.delete("/analyses/{record_id}/cancel")
+async def cancel_saved_analysis(
+    record_id: int, user: User = Depends(get_current_user)
+) -> dict[str, str | int]:
+    """Cancel an owned in-process task after its browser has refreshed."""
+
+    record = get_analysis_record_for_user(record_id, user.id)
+    if not record:
+        raise HTTPException(status_code=404, detail="未找到该分析任务")
+    if record["status"] != "processing":
+        raise HTTPException(status_code=409, detail="该分析任务已经结束")
+    with ACTIVE_ANALYSES_LOCK:
+        job = next(
+            (item for item in ACTIVE_ANALYSES.values() if item.record_id == record_id),
+            None,
+        )
+    if not job:
+        # Records created by the old response-bound implementation can remain
+        # "processing" after refresh even though no process exists anymore.
+        finish_analysis_record(record_id, status="failed")
+        return {"status": "stale_task_closed", "record_id": record_id}
+    _cancel_job(job)
+    return {"status": "cancelling", "record_id": record_id}
+
+
 @app.delete("/analyses/{record_id}")
 async def delete_saved_analysis(record_id: int, user: User = Depends(get_current_user)) -> dict:
     """Delete one owned task's RITA database, artifact directory, and DB record."""
@@ -1394,6 +1440,7 @@ async def analyze_pcap_stream(
                     file_size=file_size,
                     model_id=model_config.key,
                 )
+                job.record_id = record_id
                 # Publish the persistent task id as soon as it exists. Clients
                 # can then recover completion from the database even if the
                 # final (and comparatively large) SSE result frame is lost.
@@ -1690,8 +1737,15 @@ async def analyze_pcap_stream(
             with ACTIVE_ANALYSES_LOCK:
                 ACTIVE_ANALYSES.pop(analysis_id, None)
 
+    response_stream = (
+        _run_stream_in_background(
+            stream(), analysis_id, sse_event("error", "分析任务执行失败，请稍后重试")
+        )
+        if user
+        else stream()
+    )
     return StreamingResponse(
-        stream(),
+        response_stream,
         media_type="text/event-stream; charset=utf-8",
         headers={
             "Cache-Control": "no-cache, no-transform",

@@ -1015,8 +1015,7 @@
 }
 
 .unified-connection-strip,
-.unified-metric-grid,
-.unified-score-grid {
+.unified-metric-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px
@@ -1034,8 +1033,7 @@
 }
 
 .unified-connection-strip span,
-.unified-metric>span,
-.unified-score>span {
+.unified-metric-name {
     display: block;
     color: #64748b;
     font-size: 12px
@@ -1083,8 +1081,7 @@
     content: ""
 }
 
-.unified-metric,
-.unified-score {
+.unified-metric {
     min-width: 0;
     padding: 15px;
     border: 1px solid #dbe5f0;
@@ -1092,8 +1089,7 @@
     background: linear-gradient(135deg, #fafcff, #fff)
 }
 
-.unified-metric strong,
-.unified-score strong {
+.unified-metric-value {
     display: block;
     margin-top: 8px;
     overflow-wrap: anywhere;
@@ -1103,23 +1099,13 @@
     line-height: 1.2
 }
 
-.unified-metric small,
-.unified-score small {
+.unified-metric-description {
     display: block;
     min-height: 17px;
     margin-top: 7px;
     color: #94a3b8;
     font-size: 11px;
     line-height: 1.45
-}
-
-.unified-score {
-    border-color: #d7ebe2;
-    background: linear-gradient(135deg, #f7fffb, #fff)
-}
-
-.unified-score strong {
-    color: #047857
 }
 
 .unified-chart-card {
@@ -1592,8 +1578,7 @@
     .visualization-grid,
     .rita-components,
     .unified-connection-strip,
-    .unified-metric-grid,
-    .unified-score-grid {
+    .unified-metric-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr))
     }
 
@@ -1651,8 +1636,7 @@
     .visualization-grid,
     .rita-components,
     .unified-connection-strip,
-    .unified-metric-grid,
-    .unified-score-grid {
+    .unified-metric-grid {
         grid-template-columns: 1fr
     }
 

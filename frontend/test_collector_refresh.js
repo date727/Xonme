@@ -36,6 +36,11 @@ assert.match(
   /recent_alerts:finalAlerts\(threats\)/,
   "final dashboard threats must be adapted to realtime alert fields",
 );
+assert.match(
+  source,
+  /if\(state==="completed"&&cloudStatus==="completed"\)setStage\("result"\);/,
+  "a completed local status refresh must preserve stage 5 instead of reverting to stage 4",
+);
 
 class FakeClassList {
   constructor() { this.values = new Set(); }
@@ -62,6 +67,8 @@ class FakeElement {
     this.hidden = false;
   }
   addEventListener() {}
+  setAttribute(name, value) { this[name] = value; }
+  removeAttribute(name) { delete this[name]; }
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = children; }
   querySelector() { return new FakeElement(); }
@@ -70,6 +77,7 @@ class FakeElement {
 
 async function runRefreshRecovery(hasStoredSession) {
   const elements = new Map();
+  const stageElements = Array.from({ length: 5 }, () => new FakeElement());
   const element = (selector) => {
     if (!elements.has(selector)) elements.set(selector, new FakeElement());
     return elements.get(selector);
@@ -124,7 +132,7 @@ async function runRefreshRecovery(hasStoredSession) {
     },
     document: {
       querySelector: element,
-      querySelectorAll: () => [],
+      querySelectorAll: (selector) => selector === "[data-collector-stage]" ? stageElements : [],
       createElement: () => new FakeElement(),
     },
     window: {
@@ -148,6 +156,9 @@ async function runRefreshRecovery(hasStoredSession) {
   assert.equal(element("#collector-connection-count").textContent, "12");
   assert.equal(element("#collector-open-data-btn").disabled, false);
   assert.equal(context.window.C2SherlockCollectorResult, dashboardPayload);
+  assert.equal(stageElements[4].classList.contains("active"), true);
+  assert.equal(stageElements.filter((item) => item.classList.contains("active")).length, 1);
+  assert.equal(stageElements.slice(0, 4).every((item) => item.classList.contains("done")), true);
   const alert = element("#collector-alert-list").children[0];
   assert.equal(alert.children[0].children[0].textContent, "192.0.2.10 → 198.51.100.20:443");
 }

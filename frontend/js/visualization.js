@@ -82,13 +82,15 @@
     // must contribute to the overview KPI without becoming a suspicious row.
     const ritaResults = [...list.filter((item) => (item.detection_sources || []).includes("RITA")), ...rawRita];
     const maxBeacon = Math.max(0, ...ritaResults.map((item) => num(item.beacon_score)));
-    const maxLstm = Math.max(0, ...list.map((item) => num(item.lstm_confidence)));
+    const lstmResults = list.filter((item) => (item.detection_sources || []).includes("LSTM") && item.lstm_confidence != null);
+    const maxLstm = Math.max(0, ...lstmResults.map((item) => num(item.lstm_confidence)));
     const attributionConfidence = attribution.confidence == null ? null : num(attribution.confidence);
     const riskKey = String(primary?.threat_category || "low").toLowerCase();
     const riskLabel = primary ? `${risk(riskKey)}风险` : "未发现风险";
     const statusLabel = analysis?.status === "completed" ? "已完成" : (analysis?.status || "暂无数据");
     const filename = analysis?.original_filename || dashboard?.display_name || "暂无数据";
     const setValue = (id, value) => { const el = $(id); if (el) el.textContent = value == null || value === "" ? "暂无数据" : String(value); };
+    const setMetricValue = (id, value) => { const el = $(id); if (el) el.textContent = value == null || value === "" ? "—" : String(value); };
     const setRiskBadge = (id, label, key = "low") => { const el = $(id); if (!el) return; el.textContent = label; el.className = `overview-badge risk ${["critical", "high", "medium", "low"].includes(key) ? key : "low"}`; };
 
     setValue("overview-file-name", filename);
@@ -99,14 +101,14 @@
     setRiskBadge("overview-risk-badge", riskLabel, riskKey);
     setRiskBadge("overview-conclusion-risk", riskLabel, riskKey);
 
-    setValue("viz-threat-count", list.length);
-    setValue("viz-beacon-max", ritaResults.length ? maxBeacon.toFixed(1) : null);
-    setValue("viz-lstm-max", list.length ? `${maxLstm.toFixed(1)}%` : null);
-    setValue("viz-rag-confidence", attributionConfidence == null ? null : `${attributionConfidence.toFixed(1)}%`);
+    setMetricValue("viz-threat-count", list.length);
+    setMetricValue("viz-beacon-max", ritaResults.length ? maxBeacon.toFixed(1) : null);
+    setMetricValue("viz-lstm-max", lstmResults.length ? `${maxLstm.toFixed(1)}%` : null);
+    setMetricValue("viz-rag-confidence", attributionConfidence == null ? null : `${attributionConfidence.toFixed(1)}%`);
     setValue("viz-threat-note", list.length ? `${list.length} 条需重点关注` : "未发现重点可疑连接");
-    setValue("viz-beacon-note", ritaResults.length ? (list.length ? (maxBeacon >= 80 ? "强周期特征" : maxBeacon >= 50 ? "中等周期特征" : "低周期特征") : "原始 RITA 结果，未达告警阈值") : "暂无 RITA 结果");
-    setValue("viz-lstm-note", list.length ? (maxLstm >= 80 ? "高置信异常" : maxLstm >= 50 ? "中等置信异常" : "低置信异常") : "暂无 LSTM 告警");
-    setValue("viz-rag-note", attributionConfidence == null ? "暂无归因结果" : (attributionConfidence >= 70 ? "较高归因可信度" : attributionConfidence >= 40 ? "中等归因可信度" : "低归因可信度"));
+    setValue("viz-beacon-note", ritaResults.length ? (list.length ? (maxBeacon >= 80 ? "强周期特征" : maxBeacon >= 50 ? "中等周期特征" : "低周期特征") : "周期性特征低于风险阈值") : "未检出周期性通信风险");
+    setValue("viz-lstm-note", lstmResults.length ? (maxLstm >= 80 ? "高置信异常" : maxLstm >= 50 ? "中等置信异常" : "低置信异常") : "未检出时序异常风险");
+    setValue("viz-rag-note", attributionConfidence == null ? "未发现需溯源的威胁" : (attributionConfidence >= 70 ? "较高归因可信度" : attributionConfidence >= 40 ? "中等归因可信度" : "低归因可信度"));
 
     const dualEngineCount = list.filter((item) => ["RITA", "LSTM"].every((engine) => (item.detection_sources || []).includes(engine))).length;
     const target = primary ? `${primary.src_ip || "-"} → ${primary.dst_ip || "-"}:${primary.dst_port || "-"}` : "当前样本";
@@ -174,8 +176,8 @@
     const protocol = evidence.protocol || x.protocol || "—";
     const service = evidence.service || "";
     const severity = hasRita ? risk(x.threat_category) : unavailable;
-    const modelJudgement = hasLstm ? (num(x.lstm_confidence) >= 50 ? "潜在 Beacon" : "未发现 Beacon") : unavailable;
-    const metric = (label, value, note = "") => `<article class="unified-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note || unavailableNote)}</small></article>`;
+    const modelJudgement = hasLstm ? (num(x.lstm_confidence) >= 50 ? "疑似周期性通信" : "未发现周期性通信") : unavailable;
+    const metric = (label, value, note = "") => `<article class="unified-metric"><span class="unified-metric-name">${escapeHtml(label)}</span><strong class="unified-metric-value">${escapeHtml(value)}</strong><small class="unified-metric-description">${escapeHtml(note || unavailableNote)}</small></article>`;
     const scoreFields = [
       ["时间规律性", "timestamp_score", "通信时间规律评分"],
       ["数据量规律性", "datasize_score", "通信数据量规律评分"],
@@ -184,7 +186,7 @@
     ];
     const behaviorScores = scoreFields.map(([label, key, note]) => {
       const value = hasRita && evidence[key] != null ? displayNumber(evidence[key], 3) : unavailable;
-      return `<article class="unified-score"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`;
+      return metric(label, value, hasRita ? note : unavailableNote);
     }).join("");
 
     box.className = "unified-detection";
@@ -198,7 +200,7 @@
       <section class="unified-section">
         <h3>核心检测指标</h3>
         <div class="unified-metric-grid">
-          ${metric("周期性通信评分", hasRita ? displayNumber(x.beacon_score) : unavailable, hasRita ? "Beacon 通信规律评分" : "未参与本次评估")}
+          ${metric("周期性通信评分", hasRita ? displayNumber(x.beacon_score) : unavailable, hasRita ? "周期性通信规律评分" : "未参与本次评估")}
           ${metric("时序异常置信度", hasLstm ? `${displayNumber(x.lstm_confidence)}%` : unavailable, hasLstm ? "时序模型评估结果" : "未参与本次评估")}
           ${metric("综合风险等级", severity, hasRita ? "通信行为风险" : "未参与本次评估")}
           ${metric("模型判断", modelJudgement, hasLstm ? "时序检测结论" : "未参与本次评估")}
@@ -209,13 +211,13 @@
         <div class="unified-metric-grid">
           ${metric("累计通信时长", hasRita ? `${displayNumber(evidence.total_duration, 1)} 秒` : unavailable, hasRita ? "聚合通信时长" : "未参与本次评估")}
           ${metric("总通信数据量", hasRita ? formatBytes(evidence.total_bytes) : unavailable, hasRita ? "双向累计数据量" : "未参与本次评估")}
-          ${metric("DNS C2 风险评分", hasRita ? displayNumber(evidence.c2_over_dns, 3) : unavailable, hasRita ? "DNS 控制通道风险" : "未参与本次评估")}
+          ${metric("域名控制通道风险评分", hasRita ? displayNumber(evidence.c2_over_dns, 3) : unavailable, hasRita ? "域名控制通道风险" : "未参与本次评估")}
           ${metric("长连接风险评分", hasRita ? displayNumber(evidence.long_connection, 3) : unavailable, hasRita ? "持续连接风险" : "未参与本次评估")}
         </div>
       </section>
       <section class="unified-section">
         <h3>通信行为特征</h3>
-        <div class="unified-score-grid">${behaviorScores}</div>
+        <div class="unified-metric-grid">${behaviorScores}</div>
       </section>
       <article class="visualization-card unified-chart-card">
         <div class="rita-chart-head"><h3>通信行为趋势</h3><div class="rita-chart-tabs"><button type="button" class="active" data-unified-chart="interval">通信间隔</button><button type="button" data-unified-chart="frequency">连接频率</button><button type="button" data-unified-chart="size">数据大小</button></div></div>

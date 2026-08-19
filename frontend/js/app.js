@@ -1,5 +1,6 @@
 const STORAGE_KEYS = {
   modelName: "c2s.modelName",
+  activeAnalysisRecordId: "c2s.activeAnalysisRecordId",
 };
 
 let currentUser = null;
@@ -85,6 +86,7 @@ let activeAnalysisRecordId = null;
 let streamResultReceived = false;
 let analysisCompletionPollTimer = null;
 let analysisCompletionPollBusy = false;
+let detachedAnalysisPollTimer = null;
 let displayedAnalysisId = null;
 let latestVisualization = null;
 const HISTORY_PAGE_SIZE = 10;
@@ -576,11 +578,14 @@ const downloadReport = async () => {
 };
 
 const cancelAnalysis = async () => {
-  if (!analysisRunning || !activeController || !activeAnalysisId) return;
+  if (!analysisRunning) return;
   setStatus("正在请求后端取消分析...");
   cancelBtn.disabled = true;
   try {
-    const response = await fetch(`${apiBase}/analyze/${activeAnalysisId}`, {
+    const endpoint = activeAnalysisId
+      ? `/analyze/${activeAnalysisId}`
+      : `/analyses/${activeAnalysisRecordId}/cancel`;
+    const response = await fetch(`${apiBase}${endpoint}`, {
       method: "DELETE",
       credentials: "include",
       keepalive: true,
@@ -588,7 +593,16 @@ const cancelAnalysis = async () => {
     if (!response.ok) {
       throw new Error(`后端未能取消任务（${response.status}）`);
     }
-    activeController.abort();
+    stopDetachedAnalysisPolling();
+    clearPersistedAnalysis();
+    if (activeController) {
+      activeController.abort();
+    } else {
+      analysisRunning = false;
+      activeAnalysisRecordId = null;
+      setRunControls(false);
+      setStatus("分析取消请求已提交。");
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "取消请求失败";
     setStatus(`${message}；分析仍可能在后端运行。`, true);
@@ -756,9 +770,26 @@ const stopAnalysisCompletionPolling = () => {
   analysisCompletionPollBusy = false;
 };
 
+const clearPersistedAnalysis = () => {
+  window.localStorage.removeItem(STORAGE_KEYS.activeAnalysisRecordId);
+};
+
+const persistActiveAnalysis = (recordId) => {
+  if (Number.isInteger(recordId) && recordId > 0) {
+    window.localStorage.setItem(STORAGE_KEYS.activeAnalysisRecordId, String(recordId));
+  }
+};
+
+const stopDetachedAnalysisPolling = () => {
+  if (detachedAnalysisPollTimer) window.clearInterval(detachedAnalysisPollTimer);
+  detachedAnalysisPollTimer = null;
+};
+
 const applyCompletedStreamResult = (payload) => {
   const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
   streamResultReceived = true;
+  stopDetachedAnalysisPolling();
+  clearPersistedAnalysis();
   stopAnalysisCompletionPolling();
   latestReportMarkdown = markdown;
   latestVisualization = payload.visualization || null;
@@ -883,7 +914,10 @@ const handleStreamEvent = (eventName, data) => {
   if (eventName === "analysis_created") {
     const payload = JSON.parse(data);
     activeAnalysisRecordId = Number(payload.analysis_record_id) || null;
-    if (activeAnalysisRecordId) startAnalysisCompletionPolling(activeAnalysisRecordId);
+    if (activeAnalysisRecordId) {
+      persistActiveAnalysis(activeAnalysisRecordId);
+      startAnalysisCompletionPolling(activeAnalysisRecordId);
+    }
     return;
   }
 
@@ -907,10 +941,12 @@ const handleStreamEvent = (eventName, data) => {
   }
 
   if (eventName === "cancelled") {
+    clearPersistedAnalysis();
     throw new DOMException("分析已由后端取消", "AbortError");
   }
 
   if (eventName === "error") {
+    clearPersistedAnalysis();
     markError(currentStep);
     throw new Error(data || "分析失败");
   }
@@ -942,6 +978,7 @@ const analyzeSelectedFile = async () => {
   activeController = new AbortController();
   activeAnalysisId = createAnalysisId();
   activeAnalysisRecordId = null;
+  clearPersistedAnalysis();
   streamResultReceived = false;
   setRunControls(true);
   currentStep = null;
@@ -1031,6 +1068,67 @@ const analyzeSelectedFile = async () => {
     activeAnalysisId = null;
     activeAnalysisRecordId = null;
     setRunControls(false);
+  }
+};
+
+const resumeDetachedAnalysis = async () => {
+  if (!currentUser || analysisRunning) return;
+  let recordId = Number(window.localStorage.getItem(STORAGE_KEYS.activeAnalysisRecordId));
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    try {
+      const response = await fetch(`${apiBase}/analyses?page=1`, { credentials: "include", cache: "no-store" });
+      if (response.ok) {
+        const payload = await response.json();
+        const active = (payload.analyses || []).find((item) => item.status === "processing");
+        recordId = Number(active?.id);
+        if (Number.isInteger(recordId) && recordId > 0) persistActiveAnalysis(recordId);
+      }
+    } catch (error) {
+      console.warn("查找正在运行的云端任务失败", error);
+    }
+  }
+  if (!Number.isInteger(recordId) || recordId <= 0) return;
+
+  const check = async () => {
+    try {
+      const response = await fetch(`${apiBase}/analyses/${recordId}/status`, { credentials: "include", cache: "no-store" });
+      if (response.status === 404) {
+        clearPersistedAnalysis();
+        stopDetachedAnalysisPolling();
+        return;
+      }
+      if (!response.ok) throw new Error(await getApiError(response));
+      const task = await response.json();
+      if (task.status === "processing") {
+        activeAnalysisRecordId = recordId;
+        analysisRunning = true;
+        selectedFile = null;
+        fileName.textContent = `${task.original_filename || "云端分析任务"} · 云端处理中`;
+        if (selectedFileEl) selectedFileEl.hidden = false;
+        setRunControls(true);
+        cancelBtn.disabled = false;
+        resultEl.textContent = "页面已恢复连接，云端任务仍在继续分析；完成后将自动加载结果。";
+        setStatus("已恢复云端分析任务，正在等待检测完成。刷新页面不会终止任务。");
+        return;
+      }
+      stopDetachedAnalysisPolling();
+      analysisRunning = false;
+      setRunControls(false);
+      if (task.status === "completed") {
+        await recoverCompletedStreamResult(recordId);
+      } else {
+        clearPersistedAnalysis();
+        setStatus(task.status === "cancelled" ? "分析已取消。" : "云端分析未能成功完成。", task.status === "failed");
+      }
+    } catch (error) {
+      console.warn("恢复云端分析任务失败", error);
+    }
+  };
+
+  await check();
+  if (analysisRunning && activeAnalysisRecordId === recordId) {
+    stopDetachedAnalysisPolling();
+    detachedAnalysisPollTimer = window.setInterval(check, 1500);
   }
 };
 
@@ -1410,7 +1508,10 @@ const loadSession = async () => {
   sessionResolved = true;
   document.documentElement.classList.remove("auth-pending");
   renderAccount();
-  if (currentUser) void loadAnalysisHistory();
+  if (currentUser) {
+    void loadAnalysisHistory();
+    void resumeDetachedAnalysis();
+  }
   const routeState = getHashState();
   if (currentUser && routeState.tab === "capability") {
     void loadAnalysisFromRoute(routeState.params);
