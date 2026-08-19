@@ -44,6 +44,20 @@ class CollectorServiceTests(unittest.TestCase):
         self.assertEqual(parsed, [("step", "zeek")])
         self.assertTrue(remainder.startswith("event: result"))
 
+    def test_sse_parser_handles_analysis_created_and_result_together(self):
+        parsed, remainder = collector_service._parse_sse_blocks(
+            'event: analysis_created\ndata: {"analysis_record_id":7}\n\n'
+            'event: result\ndata: {"analysis_record_id":7}\n\n'
+        )
+        self.assertEqual(
+            parsed,
+            [
+                ("analysis_created", '{"analysis_record_id":7}'),
+                ("result", '{"analysis_record_id":7}'),
+            ],
+        )
+        self.assertEqual(remainder, "")
+
     def test_magic_numbers_cover_pcap_and_pcapng(self):
         self.assertIn(b"\xd4\xc3\xb2\xa1", collector_service.PCAP_MAGIC)
         self.assertIn(b"\x0a\x0d\x0d\x0a", collector_service.PCAP_MAGIC)

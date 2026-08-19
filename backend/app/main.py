@@ -1383,6 +1383,13 @@ async def analyze_pcap_stream(
                     file_size=file_size,
                     model_id=model_config.key,
                 )
+                # Publish the persistent task id as soon as it exists. Clients
+                # can then recover completion from the database even if the
+                # final (and comparatively large) SSE result frame is lost.
+                yield sse_event(
+                    "analysis_created",
+                    json.dumps({"analysis_record_id": record_id}),
+                )
 
             yield sse_event("step", "zeek")
             run_zeek(str(upload_path), output_dir, job=job)

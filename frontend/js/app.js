@@ -81,6 +81,10 @@ let currentStep = null;
 let latestReportMarkdown = "";
 let activeController = null;
 let activeAnalysisId = null;
+let activeAnalysisRecordId = null;
+let streamResultReceived = false;
+let analysisCompletionPollTimer = null;
+let analysisCompletionPollBusy = false;
 let displayedAnalysisId = null;
 let latestVisualization = null;
 const HISTORY_PAGE_SIZE = 10;
@@ -746,6 +750,69 @@ const downloadCaseSample = (item) => {
   link.remove();
 };
 
+const stopAnalysisCompletionPolling = () => {
+  if (analysisCompletionPollTimer) window.clearInterval(analysisCompletionPollTimer);
+  analysisCompletionPollTimer = null;
+  analysisCompletionPollBusy = false;
+};
+
+const applyCompletedStreamResult = (payload) => {
+  const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
+  streamResultReceived = true;
+  stopAnalysisCompletionPolling();
+  latestReportMarkdown = markdown;
+  latestVisualization = payload.visualization || null;
+  resultEl.innerHTML = renderMarkdown(markdown);
+  setReportDownloadEnabled(true);
+  setCurrentDataAvailable(Boolean(latestVisualization));
+  markAllDone();
+  setStatus("分析完成。");
+  try {
+    window.C2SherlockVisualization?.render(latestVisualization, {
+      original_filename: selectedFile?.name || payload.display_name,
+      file_size: selectedFile?.size,
+      status: "completed",
+      completed_at: new Date().toISOString(),
+      report_markdown: markdown,
+    });
+  } catch (error) {
+    console.error("分析已完成，但数据中心渲染失败", error);
+  }
+};
+
+const recoverCompletedStreamResult = async (recordId) => {
+  if (!Number.isInteger(recordId) || recordId <= 0 || streamResultReceived) return false;
+  const response = await fetch(`${apiBase}/analyses/${recordId}/dashboard`, { credentials: "include" });
+  if (response.status === 409) return false;
+  if (!response.ok) throw new Error(await getApiError(response));
+  const payload = await response.json();
+  applyCompletedStreamResult({
+    display_name: payload.analysis?.original_filename,
+    analysis_markdown: payload.analysis?.report_markdown,
+    visualization: payload.dashboard,
+  });
+  return true;
+};
+
+const startAnalysisCompletionPolling = (recordId) => {
+  stopAnalysisCompletionPolling();
+  analysisCompletionPollTimer = window.setInterval(async () => {
+    if (analysisCompletionPollBusy || streamResultReceived || !analysisRunning) return;
+    analysisCompletionPollBusy = true;
+    try {
+      if (await recoverCompletedStreamResult(recordId)) {
+        // The database is the durable completion signal. End a stale stream
+        // after the saved report has been loaded successfully.
+        activeController?.abort();
+      }
+    } catch (error) {
+      console.warn("检查已保存分析结果失败", error);
+    } finally {
+      analysisCompletionPollBusy = false;
+    }
+  }, 1500);
+};
+
 const renderCaseRecommendation = () => {
   if (!caseRecommendation) return;
   const caseId = getCurrentCaseId();
@@ -813,6 +880,13 @@ const setupUpload = () => {
 };
 
 const handleStreamEvent = (eventName, data) => {
+  if (eventName === "analysis_created") {
+    const payload = JSON.parse(data);
+    activeAnalysisRecordId = Number(payload.analysis_record_id) || null;
+    if (activeAnalysisRecordId) startAnalysisCompletionPolling(activeAnalysisRecordId);
+    return;
+  }
+
   if (eventName === "step") {
     markStep(data);
     setStatus(stepLabels[data] || "正在分析...");
@@ -828,21 +902,7 @@ const handleStreamEvent = (eventName, data) => {
 
   if (eventName === "result") {
     const payload = JSON.parse(data);
-    const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
-    latestReportMarkdown = markdown;
-    resultEl.innerHTML = renderMarkdown(markdown);
-    setReportDownloadEnabled(true);
-    latestVisualization = payload.visualization || null;
-    window.C2SherlockVisualization?.render(latestVisualization, {
-      original_filename: selectedFile?.name || payload.display_name,
-      file_size: selectedFile?.size,
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      report_markdown: markdown,
-    });
-    setCurrentDataAvailable(Boolean(latestVisualization));
-    markAllDone();
-    setStatus("分析完成。");
+    applyCompletedStreamResult(payload);
     return;
   }
 
@@ -881,6 +941,8 @@ const analyzeSelectedFile = async () => {
   analysisRunning = true;
   activeController = new AbortController();
   activeAnalysisId = createAnalysisId();
+  activeAnalysisRecordId = null;
+  streamResultReceived = false;
   setRunControls(true);
   currentStep = null;
   window.localStorage.setItem(STORAGE_KEYS.modelName, modelSelect.value);
@@ -931,7 +993,14 @@ const analyzeSelectedFile = async () => {
       streamState.buffer += "\n\n";
       processSseBuffer(streamState);
     }
+    if (!streamResultReceived && activeAnalysisRecordId) {
+      await recoverCompletedStreamResult(activeAnalysisRecordId);
+    }
+    if (!streamResultReceived) {
+      throw new Error("分析流已结束，但未收到完成结果，请在个人中心查看已保存任务。");
+    }
   } catch (error) {
+    if (streamResultReceived) return;
     if (error instanceof DOMException && error.name === "AbortError") {
       latestReportMarkdown = "";
       setReportDownloadEnabled(false);
@@ -941,6 +1010,13 @@ const analyzeSelectedFile = async () => {
       clearActiveStep();
       return;
     }
+    if (activeAnalysisRecordId) {
+      try {
+        if (await recoverCompletedStreamResult(activeAnalysisRecordId)) return;
+      } catch (recoveryError) {
+        console.warn("无法从已保存任务恢复分析结果", recoveryError);
+      }
+    }
     const message = error instanceof Error ? error.message : "分析请求失败";
     latestReportMarkdown = "";
     setReportDownloadEnabled(false);
@@ -949,9 +1025,11 @@ const analyzeSelectedFile = async () => {
     setStatus(message, true);
     markError(currentStep);
   } finally {
+    stopAnalysisCompletionPolling();
     analysisRunning = false;
     activeController = null;
     activeAnalysisId = null;
+    activeAnalysisRecordId = null;
     setRunControls(false);
   }
 };

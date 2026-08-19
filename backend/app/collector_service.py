@@ -735,6 +735,8 @@ def _run_analysis(session_id: str) -> None:
     async def consume() -> None:
         from app.main import analyze_pcap_stream
 
+        persistent_record_id: int | None = None
+        result_received = False
         with source_path.open("rb") as file_obj:
             upload = UploadFile(file=file_obj, filename=filename, headers=Headers())
             response = await analyze_pcap_stream(
@@ -748,7 +750,17 @@ def _run_analysis(session_id: str) -> None:
                 buffer += chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk
                 parsed, buffer = _parse_sse_blocks(buffer)
                 for event_type, data in parsed:
-                    if event_type == "step":
+                    if event_type == "analysis_created":
+                        payload = json.loads(data)
+                        persistent_record_id = payload.get("analysis_record_id")
+                        if persistent_record_id:
+                            update_session(
+                                session_id,
+                                analysis_record_id=persistent_record_id,
+                                event_type="analysis_created",
+                                event_payload={"analysis_record_id": persistent_record_id},
+                            )
+                    elif event_type == "step":
                         update_session(
                             session_id,
                             current_step=data,
@@ -767,6 +779,7 @@ def _run_analysis(session_id: str) -> None:
                             event_type="completed",
                             event_payload={"analysis_record_id": analysis_record_id},
                         )
+                        result_received = True
                     elif event_type in {"error", "cancelled"}:
                         update_session(
                             session_id,
@@ -775,6 +788,30 @@ def _run_analysis(session_id: str) -> None:
                             event_type="failed",
                             event_payload={"message": data},
                         )
+            # Streaming transports can occasionally lose the final result frame
+            # after the report has already been committed. Treat the database as
+            # the source of truth and recover that terminal state here.
+            if not result_received and persistent_record_id:
+                from app.database import get_analysis_record_for_user
+
+                persisted = get_analysis_record_for_user(persistent_record_id, user.id)
+                if persisted and persisted.get("status") == "completed":
+                    update_session(
+                        session_id,
+                        status="completed",
+                        analysis_record_id=persistent_record_id,
+                        event_type="completed",
+                        event_payload={"analysis_record_id": persistent_record_id},
+                    )
+                elif persisted and persisted.get("status") in {"failed", "cancelled"}:
+                    message = "完整分析未能成功完成，请重新发起在线监测"
+                    update_session(
+                        session_id,
+                        status="failed",
+                        error_message=message,
+                        event_type="failed",
+                        event_payload={"message": message},
+                    )
 
     try:
         asyncio.run(consume())
