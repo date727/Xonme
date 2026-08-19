@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, create_engine, func, text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, create_engine, func, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
@@ -91,7 +91,7 @@ class CollectorSession(Base):
     upload_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     token_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     upload_consumed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    status: Mapped[str] = mapped_column(String(24), nullable=False, default="awaiting_upload", index=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="awaiting_chunks", index=True)
     current_step: Mapped[str | None] = mapped_column(String(24))
     model_id: Mapped[str | None] = mapped_column(String(80))
     analysis_record_id: Mapped[int | None] = mapped_column(
@@ -112,6 +112,28 @@ class CollectorSession(Base):
     events: Mapped[list["CollectorEvent"]] = relationship(
         back_populates="session", cascade="all, delete-orphan", order_by="CollectorEvent.id"
     )
+    chunks: Mapped[list["CollectorChunk"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="CollectorChunk.sequence"
+    )
+
+
+class CollectorChunk(Base):
+    """One complete PCAP/PCAPNG ring-buffer file uploaded by the collector."""
+
+    __tablename__ = "collector_chunks"
+    __table_args__ = (UniqueConstraint("session_id", "sequence", name="uq_collector_chunk_sequence"),)
+
+    id: Mapped[int] = mapped_column(PRIMARY_KEY_TYPE, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("collector_sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=local_database_time)
+
+    session: Mapped[CollectorSession] = relationship(back_populates="chunks")
 
 
 class CollectorEvent(Base):

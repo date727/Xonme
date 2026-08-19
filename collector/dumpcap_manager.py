@@ -10,7 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from config import CONFIG
+from config import CONFIG, load_user_settings, save_user_setting
 from models import CaptureInterface
 
 
@@ -21,20 +21,107 @@ class DumpcapError(RuntimeError):
     pass
 
 
+def _resolve_dumpcap_path(value: str | os.PathLike | None) -> Path | None:
+    """Resolve a file or installation directory to a real dumpcap executable."""
+
+    if not value:
+        return None
+    candidate = Path(os.path.expandvars(str(value))).expanduser()
+    if candidate.is_dir():
+        candidate = candidate / "dumpcap.exe"
+    if not candidate.is_file() or candidate.name.lower() != "dumpcap.exe":
+        return None
+    return candidate.resolve()
+
+
 def find_dumpcap() -> Path | None:
-    configured = os.getenv("C2S_DUMPCAP_PATH")
+    user_configured = load_user_settings().get("dumpcap_path")
     candidates = [
-        Path(configured) if configured else None,
+        os.getenv("C2S_DUMPCAP_PATH"),
+        user_configured if isinstance(user_configured, str) else None,
         Path(os.getenv("ProgramFiles", r"C:\Program Files")) / "Wireshark" / "dumpcap.exe",
         Path(os.getenv("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Wireshark" / "dumpcap.exe",
     ]
     located = shutil.which("dumpcap.exe")
     if located:
-        candidates.append(Path(located))
+        candidates.append(located)
     for candidate in candidates:
-        if candidate and candidate.is_file():
-            return candidate.resolve()
+        resolved = _resolve_dumpcap_path(candidate)
+        if resolved:
+            return resolved
     return None
+
+
+def validate_dumpcap_executable(path: Path) -> Path:
+    """Verify that a selected file is dumpcap and can be executed safely."""
+
+    resolved = _resolve_dumpcap_path(path)
+    if not resolved:
+        raise DumpcapError("请选择 Wireshark 安装目录中的 dumpcap.exe")
+    try:
+        result = subprocess.run(
+            [str(resolved), "-v"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise DumpcapError(f"无法执行所选 dumpcap.exe：{exc}") from exc
+    version_text = f"{result.stdout}\n{result.stderr}".lower()
+    if result.returncode != 0 or "dumpcap" not in version_text:
+        detail = (result.stderr or result.stdout or "").strip()
+        raise DumpcapError(detail or "所选文件不是可用的 dumpcap.exe")
+    return resolved
+
+
+def prompt_for_dumpcap() -> Path | None:
+    """Ask a Windows user to locate dumpcap and remember the valid selection."""
+
+    if os.name != "nt":
+        return None
+    try:
+        import tkinter as tk
+        from tkinter import filedialog, messagebox
+    except ImportError:
+        return None
+
+    try:
+        root = tk.Tk()
+    except (tk.TclError, OSError):
+        return None
+    root.withdraw()
+    try:
+        root.attributes("-topmost", True)
+    except tk.TclError:
+        pass
+    try:
+        while True:
+            selected = filedialog.askopenfilename(
+                parent=root,
+                title="请选择 Wireshark 的 dumpcap.exe",
+                initialdir=str(Path(os.getenv("ProgramFiles", r"C:\Program Files")) / "Wireshark"),
+                filetypes=(("dumpcap.exe", "dumpcap.exe"), ("可执行文件", "*.exe")),
+            )
+            if not selected:
+                return None
+            try:
+                resolved = validate_dumpcap_executable(Path(selected))
+                save_user_setting("dumpcap_path", str(resolved))
+                return resolved
+            except (DumpcapError, OSError) as exc:
+                messagebox.showerror("dumpcap 路径无效", str(exc), parent=root)
+    finally:
+        root.destroy()
+
+
+def ensure_dumpcap_configured() -> Path | None:
+    """Use automatic discovery first, then offer a local picker on Windows."""
+
+    return find_dumpcap() or prompt_for_dumpcap()
 
 
 def list_interfaces(dumpcap_path: Path) -> list[CaptureInterface]:
@@ -137,7 +224,8 @@ def start_dumpcap(
         "-i", interface_id,
         "-f", capture_filter,
         "-a", f"duration:{duration_seconds}",
-        "-a", f"filesize:{max_file_size_mb * 1024}",
+        "-b", f"duration:{CONFIG.chunk_duration_seconds}",
+        "-b", f"filesize:{min(CONFIG.chunk_size_mb, max_file_size_mb) * 1024}",
         "-w", str(output_path),
     ]
     with log_path.open("w", encoding="utf-8") as log_file:

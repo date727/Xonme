@@ -67,7 +67,6 @@ const reportFormat = $("#report-format");
 const downloadReportBtn = $("#download-report-btn");
 const printReportBtn = $("#print-report-btn");
 const caseRecommendation = $("#case-recommendation");
-const caseToast = $("#case-toast");
 const historyEmpty = $("#history-empty");
 const historyTableWrap = $("#history-table-wrap");
 const analysisHistoryBody = $("#analysis-history-body");
@@ -738,13 +737,6 @@ const setupPrincipleTabs = () => {
   syncPrincipleNavigation();
 };
 
-const goToAnalyzeCase = (caseId) => {
-  const params = new URLSearchParams();
-  params.set("case", caseId);
-  switchTab("tool", { params, push: true });
-  document.getElementById("tool")?.scrollIntoView({ block: "start", behavior: "smooth" });
-};
-
 const downloadCaseSample = (item) => {
   const link = document.createElement("a");
   link.href = item.samplePath;
@@ -752,26 +744,6 @@ const downloadCaseSample = (item) => {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  showCaseToast(item.id);
-};
-
-const showCaseToast = (caseId) => {
-  if (!caseToast) return;
-  caseToast.hidden = false;
-  caseToast.innerHTML = `
-    <div>
-      <strong>样本已开始下载。</strong>
-      <p>你可以前往检测中心上传该文件，体验完整分析流程。</p>
-    </div>
-    <div class="case-toast-actions">
-      <button class="secondary" type="button" data-toast-close>留在当前页</button>
-      <button class="primary" type="button" data-toast-analyze="${caseId}">前往检测中心</button>
-    </div>
-  `;
-};
-
-const hideCaseToast = () => {
-  if (caseToast) caseToast.hidden = true;
 };
 
 const renderCaseRecommendation = () => {
@@ -797,17 +769,6 @@ const setupCaseExamples = () => {
       const item = caseExamples[download.dataset.caseDownload];
       if (item) downloadCaseSample(item);
       return;
-    }
-
-    if (event.target.closest("[data-toast-close]")) {
-      hideCaseToast();
-      return;
-    }
-
-    const toastAnalyze = event.target.closest("[data-toast-analyze]");
-    if (toastAnalyze) {
-      hideCaseToast();
-      goToAnalyzeCase(toastAnalyze.dataset.toastAnalyze);
     }
   });
 };

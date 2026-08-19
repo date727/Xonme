@@ -40,6 +40,40 @@ def _setting(name: str, default):
     return os.getenv(env_name, _SETTINGS.get(name, default))
 
 
+def user_settings_path() -> Path:
+    """Return the writable per-user settings file used by the collector."""
+
+    return _default_data_dir() / "settings.json"
+
+
+def load_user_settings() -> dict:
+    """Load non-sensitive settings selected on this Windows computer."""
+
+    path = user_settings_path()
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def save_user_setting(name: str, value: str) -> None:
+    """Atomically update one local setting without changing bundled policy."""
+
+    path = user_settings_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    settings = load_user_settings()
+    settings[name] = value
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
 @dataclass(frozen=True)
 class CollectorConfig:
     host: str = "127.0.0.1"
@@ -56,6 +90,8 @@ class CollectorConfig:
     min_duration_seconds: int = 10
     max_duration_seconds: int = 3600
     max_file_size_mb: int = 100
+    chunk_duration_seconds: int = max(10, int(_setting("chunk_duration_seconds", 60)))
+    chunk_size_mb: int = max(1, int(_setting("chunk_size_mb", 16)))
     max_filter_length: int = 512
     upload_connect_timeout: int = 15
     upload_read_timeout: int = 300

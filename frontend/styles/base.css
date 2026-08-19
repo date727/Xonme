@@ -2823,45 +2823,8 @@ code {
   min-height: 40px;
 }
 
-.case-toast {
-  position: fixed;
-  right: clamp(18px, 3vw, 36px);
-  bottom: clamp(18px, 3vw, 36px);
-  z-index: 60;
-  display: grid;
-  width: min(420px, calc(100vw - 32px));
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid rgba(16, 185, 129, 0.28);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 100% 0, rgba(20, 191, 130, 0.12), transparent 36%),
-    rgba(255, 255, 255, 0.96);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
-  backdrop-filter: blur(18px);
-}
-
-.case-recommendation[hidden],
-.case-toast[hidden] {
+.case-recommendation[hidden] {
   display: none;
-}
-
-.case-toast strong {
-  color: #065f46;
-  font-size: 16px;
-}
-
-.case-toast p {
-  margin: 5px 0 0;
-  color: #475569;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.case-toast-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
 }
 
 .explain-card.benign {

@@ -4,11 +4,19 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Uplo
 from fastapi.responses import StreamingResponse
 
 from app.auth import get_current_user
-from app.collector_schemas import CollectorSessionCreate, CollectorSessionCreated, CollectorSessionStatus
+from app.collector_schemas import (
+    CollectorSessionCreate,
+    CollectorSessionCreated,
+    CollectorSessionFinalize,
+    CollectorSessionStatus,
+)
 from app.collector_service import (
+    collector_session_snapshot,
     create_collector_session,
+    finalize_collector_session,
     get_owned_collector_session,
     iter_session_events,
+    save_collector_chunk,
     save_collector_upload,
 )
 from app.database import User
@@ -19,19 +27,16 @@ router = APIRouter(prefix="/collector/sessions", tags=["collector"])
 
 
 def _status(record) -> CollectorSessionStatus:
-    return CollectorSessionStatus(
-        session_id=record.id,
-        status=record.status,
-        current_step=record.current_step,
-        original_filename=record.original_filename,
-        file_size=record.file_size,
-        sha256=record.sha256,
-        analysis_record_id=record.analysis_record_id,
-        error_message=record.error_message,
-        created_at=record.created_at,
-        updated_at=record.updated_at,
-        completed_at=record.completed_at,
-    )
+    return CollectorSessionStatus(**collector_session_snapshot(record))
+
+
+def _bearer_token(authorization: str | None) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="缺少上传令牌")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="缺少上传令牌")
+    return token
 
 
 @router.post("", response_model=CollectorSessionCreated, status_code=status.HTTP_201_CREATED)
@@ -45,8 +50,46 @@ def create_session(
         session_id=record.id,
         upload_token=raw_token,
         expires_at=record.token_expires_at,
-        upload_path=f"/collector/sessions/{record.id}/pcap",
+        upload_path=f"/collector/sessions/{record.id}/chunks/{{sequence}}",
     )
+
+
+@router.put("/{session_id}/chunks/{sequence}", status_code=status.HTTP_202_ACCEPTED)
+def upload_chunk(
+    session_id: str,
+    sequence: int,
+    pcap: UploadFile = File(...),
+    authorization: str | None = Header(default=None),
+    x_chunk_sha256: str | None = Header(default=None),
+) -> dict:
+    token = _bearer_token(authorization)
+    chunk, duplicate, received_chunks, received_bytes = save_collector_chunk(
+        session_id, token, sequence, pcap, x_chunk_sha256
+    )
+    return {
+        "session_id": session_id,
+        "sequence": chunk.sequence,
+        "sha256": chunk.sha256,
+        "accepted": True,
+        "duplicate": duplicate,
+        "received_chunks": received_chunks,
+        "uploaded_bytes": received_bytes,
+    }
+
+
+@router.post("/{session_id}/finalize", status_code=status.HTTP_202_ACCEPTED)
+def finalize_session(
+    session_id: str,
+    payload: CollectorSessionFinalize,
+    authorization: str | None = Header(default=None),
+) -> dict:
+    record = finalize_collector_session(
+        session_id,
+        _bearer_token(authorization),
+        total_chunks=payload.total_chunks,
+        total_bytes=payload.total_bytes,
+    )
+    return {"session_id": record.id, "status": record.status}
 
 
 @router.post("/{session_id}/pcap", status_code=status.HTTP_202_ACCEPTED)
@@ -56,12 +99,9 @@ def upload_pcap(
     authorization: str | None = Header(default=None),
     x_capture_sha256: str | None = Header(default=None),
 ) -> dict:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="缺少上传令牌")
-    token = authorization.split(" ", 1)[1].strip()
-    if not token:
-        raise HTTPException(status_code=401, detail="缺少上传令牌")
-    record = save_collector_upload(session_id, token, pcap, x_capture_sha256)
+    record = save_collector_upload(
+        session_id, _bearer_token(authorization), pcap, x_capture_sha256
+    )
     return {"session_id": record.id, "status": record.status, "sha256": record.sha256}
 
 

@@ -1,5 +1,7 @@
 {
   "cloud_api_base": "http://你的云服务器:8765",
   "allowed_origins": "http://你的云服务器:5500",
-  "collector_port": 8766
+  "collector_port": 8766,
+  "chunk_duration_seconds": 60,
+  "chunk_size_mb": 16
 }

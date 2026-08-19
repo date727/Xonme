@@ -303,19 +303,35 @@ curl -X POST http://127.0.0.1:8765/analyze \
 
 ```text
 POST /collector/sessions
-POST /collector/sessions/{session_id}/pcap
+PUT  /collector/sessions/{session_id}/chunks/{sequence}
+POST /collector/sessions/{session_id}/finalize
 GET  /collector/sessions/{session_id}/events
 GET  /collector/sessions/{session_id}
 ```
 
-在线采集要求用户登录。网页创建会话后获得一次性上传令牌，控制器只能向对应会话上传一个最大 100 MB 的 PCAP/PCAPNG；上传完成后，云端复用现有 Zeek、RITA、LSTM、RAG 与 AI 报告流程。
+旧版 Collector 使用的 `POST /collector/sessions/{session_id}/pcap` 暂时保留为兼容接口。
+
+在线采集要求用户登录。网页创建会话后获得当前会话专用的上传令牌，控制器按顺序上传已经关闭的 PCAP/PCAPNG 分片，云端按序号和 SHA-256 幂等接收，会话累计流量最大 100 MB。停止监测后，云端使用 `mergecap` 合并完整会话，再复用现有 Zeek、RITA、LSTM、RAG 与 AI 报告流程。
+
+采集过程中，云端对最近 5 分钟内已收到的分片进行临时连接统计，识别固定目标、周期连接和重复小流量等近实时风险信号，并通过 SSE 推送到现有在线监测页面。该结果属于临时提示；最终结论仍以停止后合并整段流量运行的完整流水线为准。
+
+Ubuntu 云端需要提供 `mergecap`：
+
+```bash
+sudo apt update
+sudo apt install -y wireshark-common
+mergecap --version
+```
+
+后端启动时会通过 SQLAlchemy `create_all` 自动创建新增的 `collector_chunks` 表；已有会话表不需要删除或清空。
 
 正式部署时设置：
 
 ```dotenv
 MAX_PCAP_BYTES=104857600
-COLLECTOR_TOKEN_TTL_SECONDS=1800
+COLLECTOR_TOKEN_TTL_SECONDS=5400
 COLLECTOR_ANALYSIS_WORKERS=1
+MERGECAP_PATH=/usr/bin/mergecap
 ```
 
 控制器发布配置示例（复制 `collector/config.json.example` 为 `collector/config.json`）：
@@ -324,7 +340,9 @@ COLLECTOR_ANALYSIS_WORKERS=1
 {
   "cloud_api_base": "http://你的云服务器:8765",
   "allowed_origins": "http://你的云服务器:5500",
-  "collector_port": 8766
+  "collector_port": 8766,
+  "chunk_duration_seconds": 60,
+  "chunk_size_mb": 16
 }
 ```
 

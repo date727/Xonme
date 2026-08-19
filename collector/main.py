@@ -7,6 +7,7 @@ import uvicorn
 
 from api import app
 from config import CONFIG
+from dumpcap_manager import ensure_dumpcap_configured
 
 
 class SingleInstance:
@@ -54,6 +55,7 @@ def main() -> None:
         print("C2Sherlock Collector 已经在运行。")
         return
     try:
+        ensure_dumpcap_configured()
         uvicorn.run(app, host=CONFIG.host, port=CONFIG.port, log_level="info")
     finally:
         instance.release()

@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -13,6 +14,49 @@ import dumpcap_manager
 
 
 class DumpcapManagerTests(unittest.TestCase):
+    def test_find_prefers_saved_user_path_after_environment_override(self):
+        with tempfile.TemporaryDirectory() as directory:
+            saved = Path(directory) / "saved" / "dumpcap.exe"
+            saved.parent.mkdir()
+            saved.touch()
+            with patch.dict(dumpcap_manager.os.environ, {"C2S_DUMPCAP_PATH": ""}), patch.object(
+                dumpcap_manager, "load_user_settings", return_value={"dumpcap_path": str(saved)}
+            ), patch.object(dumpcap_manager.shutil, "which", return_value=None):
+                self.assertEqual(dumpcap_manager.find_dumpcap(), saved.resolve())
+
+    def test_selected_dumpcap_is_validated_before_it_is_saved(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory) / "dumpcap.exe"
+            selected.touch()
+            completed = subprocess.CompletedProcess(
+                args=[], returncode=0, stdout="Dumpcap (Wireshark) 4.4.0", stderr=""
+            )
+            with patch.object(dumpcap_manager.subprocess, "run", return_value=completed):
+                self.assertEqual(dumpcap_manager.validate_dumpcap_executable(selected), selected.resolve())
+
+    def test_non_dumpcap_filename_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            selected = Path(directory) / "other.exe"
+            selected.touch()
+            with self.assertRaises(dumpcap_manager.DumpcapError):
+                dumpcap_manager.validate_dumpcap_executable(selected)
+
+    def test_automatic_discovery_does_not_open_picker(self):
+        located = Path("C:/Program Files/Wireshark/dumpcap.exe")
+        with patch.object(dumpcap_manager, "find_dumpcap", return_value=located), patch.object(
+            dumpcap_manager, "prompt_for_dumpcap"
+        ) as prompt:
+            self.assertEqual(dumpcap_manager.ensure_dumpcap_configured(), located)
+        prompt.assert_not_called()
+
+    def test_missing_dumpcap_opens_picker(self):
+        selected = Path("D:/Wireshark/dumpcap.exe")
+        with patch.object(dumpcap_manager, "find_dumpcap", return_value=None), patch.object(
+            dumpcap_manager, "prompt_for_dumpcap", return_value=selected
+        ) as prompt:
+            self.assertEqual(dumpcap_manager.ensure_dumpcap_configured(), selected)
+        prompt.assert_called_once_with()
+
     def test_interface_output_is_structured(self):
         completed = subprocess.CompletedProcess(
             args=[], returncode=0,
@@ -34,8 +78,9 @@ class DumpcapManagerTests(unittest.TestCase):
         args, kwargs = popen.call_args
         self.assertIsInstance(args[0], list)
         self.assertNotIn("shell", kwargs)
-        self.assertIn("duration:60", args[0])
-        self.assertIn("filesize:102400", args[0])
+        self.assertEqual(args[0].count("-a"), 1)
+        self.assertEqual(args[0].count("-b"), 2)
+        self.assertIn("filesize:16384", args[0])
 
     def test_access_probe_opens_only_the_selected_interface(self):
         completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="DLT_EN10MB", stderr="")
@@ -46,7 +91,6 @@ class DumpcapManagerTests(unittest.TestCase):
 
 class tempfile_context:
     def __enter__(self):
-        import tempfile
         self.temp = tempfile.TemporaryDirectory()
         return Path(self.temp.name) / "capture" / "capture.pcapng"
 
