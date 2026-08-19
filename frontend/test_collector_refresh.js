@@ -47,5 +47,10 @@ assert.match(
   /\.collector-stage-strip \.done b \{[^}]*border: 1px solid #75d1b7;[^}]*background: #c9f1e5;/,
   "completed stages must remain visibly green while the current stage stays highlighted",
 );
+assert.match(
+  styles,
+  /\.collector-form-grid select \{[^}]*appearance:none;[^}]*padding-right:48px;[^}]*background-position:right 18px center;/,
+  "collector dropdown arrows must have comfortable spacing from the right border",
+);
 
 console.log("collector current-task lifecycle: OK");
