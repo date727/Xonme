@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -46,6 +47,7 @@ _EXECUTOR = ThreadPoolExecutor(
     max_workers=max(1, int(os.getenv("COLLECTOR_ANALYSIS_WORKERS", "1"))),
     thread_name_prefix="collector-analysis",
 )
+LOGGER = logging.getLogger(__name__)
 
 
 def _token_ttl_seconds() -> int:
@@ -441,6 +443,9 @@ def _merge_and_analyze(session_id: str) -> None:
         )
         if not record or not chunks:
             return
+        # SQLAlchemy expires ORM attributes on commit. Copy every value needed by
+        # the background job before the database session is committed/closed.
+        chunk_paths = [str(chunk.storage_path) for chunk in chunks]
         session_dir = COLLECTOR_UPLOAD_DIR / session_id
         merged_path = session_dir / "merged.pcapng"
         record.status = "merging"
@@ -448,10 +453,10 @@ def _merge_and_analyze(session_id: str) -> None:
         _append_event(db, record, "merging", {"total_chunks": len(chunks)})
         db.commit()
     try:
-        if len(chunks) == 1:
-            shutil.copyfile(chunks[0].storage_path, merged_path)
+        if len(chunk_paths) == 1:
+            shutil.copyfile(chunk_paths[0], merged_path)
         else:
-            command = [_mergecap_executable(), "-w", str(merged_path), *[item.storage_path for item in chunks]]
+            command = [_mergecap_executable(), "-w", str(merged_path), *chunk_paths]
             result = subprocess.run(
                 command,
                 capture_output=True,
@@ -481,12 +486,13 @@ def _merge_and_analyze(session_id: str) -> None:
             db.commit()
         _run_analysis(session_id)
     except Exception as exc:
+        LOGGER.exception("Collector session %s failed while merging chunks", session_id)
         update_session(
             session_id,
             status="failed",
-            error_message=str(exc) or "流量分片合并失败",
+            error_message="云端整理流量数据失败，请检查 mergecap 配置后重新发起监测",
             event_type="failed",
-            event_payload={"message": str(exc) or "流量分片合并失败"},
+            event_payload={"message": "云端整理流量数据失败，请稍后重新发起监测"},
         )
 
 

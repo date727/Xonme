@@ -33,6 +33,7 @@ class CaptureTask:
     max_duration_seconds: int
     max_file_size_mb: int
     started_at: float = field(default_factory=time.time)
+    stopped_at: float | None = None
     process: object | None = field(default=None, repr=False)
     status: str = "starting"
     last_error: str | None = None
@@ -92,7 +93,7 @@ class CaptureCoordinator:
                 raise DumpcapError("已有采集任务正在执行")
             path = find_dumpcap()
             if not path:
-                raise DumpcapError("未找到 dumpcap.exe，请重新启动控制器并选择正确路径")
+                raise DumpcapError("未找到 dumpcap.exe，请重新启动控制器并在终端输入正确路径")
             interfaces = {item.id: item for item in list_interfaces(path)}
             if payload.interface_id not in interfaces:
                 raise DumpcapError("所选网卡不在当前 dumpcap 网卡列表中")
@@ -126,6 +127,7 @@ class CaptureCoordinator:
             if task.status == "upload_failed":
                 if task.process and task.process.poll() is None:
                     stop_dumpcap(task.process)
+                    task.stopped_at = task.stopped_at or time.time()
                 task.status = "uploading_remaining"
                 task.last_error = None
                 threading.Thread(target=self._resume_upload, args=(task,), daemon=True).start()
@@ -134,6 +136,7 @@ class CaptureCoordinator:
                 return self.status()
             task.status = "stopping"
             stop_dumpcap(task.process)
+            task.stopped_at = task.stopped_at or time.time()
             return self.status()
 
     def status(self) -> dict:
@@ -149,7 +152,7 @@ class CaptureCoordinator:
                 "capture_status": task.status,
                 "capture_id": task.capture_id,
                 "cloud_session_id": task.cloud_session_id,
-                "elapsed_seconds": max(0, int(time.time() - task.started_at)),
+                "elapsed_seconds": max(0, int((task.stopped_at or time.time()) - task.started_at)),
                 "captured_bytes": task.uploaded_bytes + local_bytes,
                 "uploaded_bytes": task.uploaded_bytes,
                 "uploaded_chunks": task.uploaded_chunks,
@@ -192,11 +195,16 @@ class CaptureCoordinator:
                     break
                 time.sleep(1)
             task.process.wait()
+            with self._lock:
+                if task.stopped_at is None:
+                    task.stopped_at = time.time()
             self._resume_upload(task)
         except Exception as exc:
             if task.process and task.process.poll() is None:
                 stop_dumpcap(task.process)
             with self._lock:
+                if task.process and task.process.poll() is not None and task.stopped_at is None:
+                    task.stopped_at = time.time()
                 task.status = "upload_failed"
                 task.last_error = str(exc) or "采集分片同步失败"
 
@@ -214,6 +222,8 @@ class CaptureCoordinator:
             finalize_capture(task.cloud_session_id, task.upload_token, task.uploaded_chunks, task.uploaded_bytes)
             with self._lock:
                 task.status = "completed"
+                if task.stopped_at is None:
+                    task.stopped_at = time.time()
                 task.upload_token = ""
                 task.pending_chunks = 0
                 task.last_error = None

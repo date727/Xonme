@@ -132,6 +132,27 @@ class CollectorChunkTests(unittest.TestCase):
                 record.id, token, total_chunks=2, total_bytes=len(content)
             )
 
+    def test_merge_copies_chunk_paths_before_database_session_closes(self):
+        from app import database
+
+        record, token = self._session()
+        content = b"\x0a\x0d\x0d\x0a" + b"merge"
+        digest = hashlib.sha256(content).hexdigest()
+        with patch.object(collector_service._EXECUTOR, "submit"):
+            collector_service.save_collector_chunk(
+                record.id, token, 0, self._upload(content), digest
+            )
+            collector_service.finalize_collector_session(
+                record.id, token, total_chunks=1, total_bytes=len(content)
+            )
+        with patch.object(collector_service, "_run_analysis") as analyze:
+            collector_service._merge_and_analyze(record.id)
+        analyze.assert_called_once_with(record.id)
+        with database.get_session_factory()() as db:
+            stored = db.get(database.CollectorSession, record.id)
+            self.assertEqual(stored.status, "queued")
+            self.assertTrue(Path(stored.storage_path).is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

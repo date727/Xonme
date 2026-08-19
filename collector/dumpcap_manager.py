@@ -79,47 +79,36 @@ def validate_dumpcap_executable(path: Path) -> Path:
 
 
 def prompt_for_dumpcap() -> Path | None:
-    """Ask a Windows user to locate dumpcap and remember the valid selection."""
+    """Ask for dumpcap in the launch terminal and remember a valid path."""
 
     if os.name != "nt":
         return None
-    try:
-        import tkinter as tk
-        from tkinter import filedialog, messagebox
-    except ImportError:
-        return None
-
-    try:
-        root = tk.Tk()
-    except (tk.TclError, OSError):
-        return None
-    root.withdraw()
-    try:
-        root.attributes("-topmost", True)
-    except tk.TclError:
-        pass
-    try:
-        while True:
-            selected = filedialog.askopenfilename(
-                parent=root,
-                title="请选择 Wireshark 的 dumpcap.exe",
-                initialdir=str(Path(os.getenv("ProgramFiles", r"C:\Program Files")) / "Wireshark"),
-                filetypes=(("dumpcap.exe", "dumpcap.exe"), ("可执行文件", "*.exe")),
-            )
-            if not selected:
-                return None
-            try:
-                resolved = validate_dumpcap_executable(Path(selected))
-                save_user_setting("dumpcap_path", str(resolved))
-                return resolved
-            except (DumpcapError, OSError) as exc:
-                messagebox.showerror("dumpcap 路径无效", str(exc), parent=root)
-    finally:
-        root.destroy()
+    print("\n未自动找到 Wireshark dumpcap.exe。")
+    print("请输入 dumpcap.exe 的完整路径。")
+    print("也可以输入 Wireshark 安装目录，程序会自动查找其中的 dumpcap.exe。")
+    print(r"示例：C:\Program Files\Wireshark\dumpcap.exe")
+    print("直接按回车可暂时跳过，之后重启 Collector 可重新输入。")
+    while True:
+        try:
+            selected = input("dumpcap 路径> ").strip().strip('"').strip("'")
+        except (EOFError, KeyboardInterrupt):
+            print("\n未配置 dumpcap 路径。")
+            return None
+        if not selected:
+            print("未配置 dumpcap 路径，Collector 将继续启动，但暂时不能抓包。")
+            return None
+        try:
+            resolved = validate_dumpcap_executable(Path(selected))
+            save_user_setting("dumpcap_path", str(resolved))
+            print(f"dumpcap 路径已验证并保存：{resolved}")
+            return resolved
+        except (DumpcapError, OSError) as exc:
+            print(f"路径无效：{exc}")
+            print("请重新输入，或直接按回车跳过。")
 
 
 def ensure_dumpcap_configured() -> Path | None:
-    """Use automatic discovery first, then offer a local picker on Windows."""
+    """Use automatic discovery first, then ask in the launch terminal."""
 
     return find_dumpcap() or prompt_for_dumpcap()
 

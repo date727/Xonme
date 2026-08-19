@@ -17,6 +17,27 @@ except ImportError:
 
 @unittest.skipIf(capture_state is None, "collector runtime dependencies are not installed")
 class CaptureStateTests(unittest.TestCase):
+    def test_elapsed_time_freezes_after_capture_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            task = capture_state.CaptureTask(
+                capture_id="capture-id",
+                cloud_session_id="00000000-0000-0000-0000-000000000001",
+                upload_token="token-value-with-enough-characters",
+                output_path=Path(directory) / "capture.pcapng",
+                max_duration_seconds=60,
+                max_file_size_mb=100,
+                started_at=100.0,
+                stopped_at=125.9,
+                status="completed",
+            )
+            coordinator = capture_state.CaptureCoordinator()
+            coordinator._task = task
+            with patch.object(coordinator, "environment", return_value={}), patch.object(
+                capture_state.time, "time", return_value=999.0
+            ):
+                status = coordinator.status()
+            self.assertEqual(status["elapsed_seconds"], 25)
+
     def test_uploaded_chunk_is_deleted_only_after_cloud_ack(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

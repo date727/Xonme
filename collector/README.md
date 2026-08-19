@@ -192,14 +192,31 @@ Collector 启动时会依次检查：
 3. Wireshark 默认安装目录；
 4. 系统 `PATH`。
 
-如果仍未找到，会弹出 Windows 文件选择器。请选择 Wireshark 安装目录中的
-`dumpcap.exe`，通常位于：
+如果仍未找到，Collector 会直接在启动它的 PowerShell 终端中要求输入路径，不会
+弹出图形文件选择器。可以粘贴 `dumpcap.exe` 的完整路径，也可以输入 Wireshark
+安装目录。通常完整路径为：
 
 ```text
 C:\Program Files\Wireshark\dumpcap.exe
 ```
 
-选择并验证成功后，路径会保存到：
+例如终端显示：
+
+```text
+未自动找到 Wireshark dumpcap.exe。
+请输入 dumpcap.exe 的完整路径。
+也可以输入 Wireshark 安装目录，程序会自动查找其中的 dumpcap.exe。
+示例：C:\Program Files\Wireshark\dumpcap.exe
+dumpcap 路径>
+```
+
+可以输入：
+
+```text
+C:\Program Files\Wireshark\dumpcap.exe
+```
+
+路径验证成功后会保存到：
 
 ```text
 %LOCALAPPDATA%\C2Sherlock\Collector\settings.json

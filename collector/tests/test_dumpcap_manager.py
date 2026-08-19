@@ -41,7 +41,7 @@ class DumpcapManagerTests(unittest.TestCase):
             with self.assertRaises(dumpcap_manager.DumpcapError):
                 dumpcap_manager.validate_dumpcap_executable(selected)
 
-    def test_automatic_discovery_does_not_open_picker(self):
+    def test_automatic_discovery_does_not_prompt_in_terminal(self):
         located = Path("C:/Program Files/Wireshark/dumpcap.exe")
         with patch.object(dumpcap_manager, "find_dumpcap", return_value=located), patch.object(
             dumpcap_manager, "prompt_for_dumpcap"
@@ -49,13 +49,32 @@ class DumpcapManagerTests(unittest.TestCase):
             self.assertEqual(dumpcap_manager.ensure_dumpcap_configured(), located)
         prompt.assert_not_called()
 
-    def test_missing_dumpcap_opens_picker(self):
+    def test_missing_dumpcap_prompts_in_terminal(self):
         selected = Path("D:/Wireshark/dumpcap.exe")
         with patch.object(dumpcap_manager, "find_dumpcap", return_value=None), patch.object(
             dumpcap_manager, "prompt_for_dumpcap", return_value=selected
         ) as prompt:
             self.assertEqual(dumpcap_manager.ensure_dumpcap_configured(), selected)
         prompt.assert_called_once_with()
+
+    def test_terminal_prompt_validates_and_saves_path(self):
+        selected = Path("D:/Wireshark/dumpcap.exe")
+        with patch.object(dumpcap_manager.os, "name", "nt"), patch(
+            "builtins.input", return_value='"D:/Wireshark/dumpcap.exe"'
+        ), patch.object(
+            dumpcap_manager, "validate_dumpcap_executable", return_value=selected
+        ) as validate, patch.object(dumpcap_manager, "save_user_setting") as save:
+            result = dumpcap_manager.prompt_for_dumpcap()
+        self.assertEqual(result, selected)
+        validate.assert_called_once_with(selected)
+        save.assert_called_once_with("dumpcap_path", str(selected))
+
+    def test_terminal_prompt_can_be_skipped(self):
+        with patch.object(dumpcap_manager.os, "name", "nt"), patch(
+            "builtins.input", return_value=""
+        ), patch.object(dumpcap_manager, "save_user_setting") as save:
+            self.assertIsNone(dumpcap_manager.prompt_for_dumpcap())
+        save.assert_not_called()
 
     def test_interface_output_is_structured(self):
         completed = subprocess.CompletedProcess(
