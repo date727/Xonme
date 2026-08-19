@@ -635,6 +635,8 @@ const buildTabHash = (tabName, params = new URLSearchParams()) => {
   return `#${tabName}${query ? `?${query}` : ""}`;
 };
 
+const authRequiredTabs = new Set(["collector", "profile"]);
+
 const loadAnalysisFromRoute = async (params) => {
   if (!currentUser) return;
   const recordId = Number(params?.get("analysis"));
@@ -653,7 +655,7 @@ const loadAnalysisFromRoute = async (params) => {
 };
 
 const switchTab = (tabName, options = {}) => {
-  if (tabName === "profile" && !currentUser) {
+  if (authRequiredTabs.has(tabName) && !currentUser) {
     if (!sessionResolved) return;
     openAuthModal("login");
     return;
@@ -685,7 +687,14 @@ const switchTab = (tabName, options = {}) => {
 
 const setupTabs = () => {
   $$("[data-tab]").forEach((control) => {
-    control.addEventListener("click", () => switchTab(control.dataset.tab));
+    control.addEventListener("click", (event) => {
+      const tabName = control.dataset.tab;
+      if (authRequiredTabs.has(tabName) && !currentUser) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      switchTab(tabName);
+    });
   });
   $$("[data-tab-link]").forEach((link) => {
     link.addEventListener("click", (event) => {
@@ -1454,8 +1463,7 @@ const setAuthMode = (mode) => {
 };
 
 const openAuthModal = (mode = "login") => {
-  const next = getHashState().tab === "profile" ? "?next=profile" : "";
-  window.location.href = `${mode === "register" ? "register.html" : "login.html"}${next}`;
+  window.location.href = mode === "register" ? "register.html" : "login.html";
 };
 
 const closeAuthModal = () => {
@@ -1516,7 +1524,7 @@ const loadSession = async () => {
   if (currentUser && routeState.tab === "capability") {
     void loadAnalysisFromRoute(routeState.params);
   }
-  if (getHashState().tab === "profile") switchTab("profile");
+  if (authRequiredTabs.has(routeState.tab)) switchTab(routeState.tab, { params: routeState.params });
 };
 
 const submitAuthForm = async (form, endpoint, messageElement, successMessage, afterSuccess) => {
