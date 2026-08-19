@@ -38,6 +38,19 @@ class FakeExtractor:
     f"local backend dependency unavailable: {MISSING_BACKEND_DEPENDENCY}",
 )
 class PipelineDecouplingTests(unittest.TestCase):
+    def test_zeek_connection_count_ignores_headers_and_blank_lines(self):
+        conn_log = (
+            "#separator \\x09\n"
+            "#fields\tts\tid.orig_h\tid.resp_h\n"
+            "100.0\t192.0.2.1\t198.51.100.1\n"
+            "\n"
+            "101.0\t192.0.2.1\t198.51.100.1\n"
+            "#close 2026-08-19-00-00-00\n"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            Path(temp_dir, "conn.log").write_text(conn_log, encoding="utf-8")
+            self.assertEqual(main._count_zeek_connections(Path(temp_dir)), 2)
+
     def test_endpoint_normalization_supports_ipv4_and_mapped_ipv6(self):
         self.assertEqual(main._canonical_endpoint("192.168.56.5"), "192.168.56.5")
         self.assertEqual(main._canonical_endpoint("::ffff:192.168.56.5"), "192.168.56.5")

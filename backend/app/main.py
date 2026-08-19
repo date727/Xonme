@@ -369,6 +369,17 @@ def _collect_zeek_logs(log_dir: Path) -> str:
     return "\n\n".join(parts) if parts else "(No Zeek logs found)"
 
 
+def _count_zeek_connections(log_dir: Path) -> int:
+    """Count real connection records in Zeek ``conn.log`` for UI summaries."""
+
+    conn_path = log_dir / "conn.log"
+    try:
+        with conn_path.open("r", encoding="utf-8", errors="replace") as conn_log:
+            return sum(1 for line in conn_log if line.strip() and not line.startswith("#"))
+    except OSError:
+        return 0
+
+
 def _canonical_endpoint(value: str) -> str:
     """Normalize ClickHouse-style IPv4-mapped IPv6 to regular IPv4 text."""
     try:
@@ -1602,6 +1613,7 @@ async def analyze_pcap_stream(
                 "schema_version": ARTIFACT_SCHEMA_VERSION,
                 "analysis_uuid": name,
                 "display_name": artifacts.display_name,
+                "connection_count": _count_zeek_connections(output_dir),
                 "engine_status": {
                     "rita_available": rita_ok,
                     "lstm_completed": lstm_results.get("status") == "completed",
