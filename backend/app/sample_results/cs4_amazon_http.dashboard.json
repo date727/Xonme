@@ -1,0 +1,1140 @@
+{
+  "schema_version": 1,
+  "analysis_uuid": "229ea3f3d3fe465c876887f0d7e46731",
+  "display_name": "20260820-153121_cs4_amazon_http_229ea3f3",
+  "connection_count": 15,
+  "engine_status": {
+    "rita_available": true,
+    "lstm_completed": true,
+    "rag_completed": true
+  },
+  "threats": [
+    {
+      "src_ip": "192.168.56.5",
+      "dst_ip": "192.168.56.4",
+      "dst_port": "80",
+      "protocol": "tcp",
+      "detection_sources": [
+        "RITA",
+        "LSTM"
+      ],
+      "beacon_score": 51.800000000000004,
+      "long_conn_value": 0.0,
+      "c2_over_dns_value": 0.0,
+      "threat_category": "high",
+      "connection_count": 15,
+      "total_bytes": 410676,
+      "rita": {
+        "protocol": "tcp",
+        "beacon_score": 0.518,
+        "destination_host": "www.amazon.com",
+        "timestamp_score": 0.071,
+        "datasize_score": 1.0,
+        "duration_score": 1.0,
+        "histogram_score": 0.0,
+        "ts_intervals": [
+          0.0,
+          1.0,
+          9.0,
+          10.0,
+          19.0,
+          54.0,
+          59.0,
+          60.0,
+          75.0
+        ],
+        "ts_interval_counts": [
+          1.0,
+          2.0,
+          4.0,
+          2.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "connection_count": 15.0,
+        "total_duration": 228.518504,
+        "total_bytes": 410676.0,
+        "long_connection": 0.0,
+        "c2_over_dns": 0.0,
+        "subdomain_count": 0.0,
+        "threat_intelligence": 0,
+        "evidence_source": "rita_mixtape",
+        "ds_sizes": [
+          627.0,
+          675.0,
+          696.0,
+          707.0,
+          867.0,
+          1104.0,
+          1187.0,
+          2425.0
+        ],
+        "ds_size_counts": [
+          1.0,
+          1.0,
+          1.0,
+          8.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "available_fields": [
+          "beacon_score",
+          "c2_over_dns_score",
+          "count",
+          "ds_score",
+          "ds_size_counts",
+          "ds_sizes",
+          "dst",
+          "dur_score",
+          "fqdn",
+          "hist_score",
+          "long_conn_score",
+          "port_proto_service",
+          "src",
+          "subdomain_count",
+          "threat_intel_score",
+          "total_bytes",
+          "total_duration",
+          "ts_interval_counts",
+          "ts_intervals",
+          "ts_score"
+        ],
+        "connection_sequence": {
+          "indexes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "interval_seconds": [
+            0.0,
+            9.641087055206299,
+            59.04415488243103,
+            0.1866130828857422,
+            60.15816593170166,
+            0.016662120819091797,
+            9.046469926834106,
+            19.217339038848877,
+            1.204509973526001,
+            74.42340397834778,
+            9.904042959213257,
+            54.21905016899109,
+            9.983336925506592,
+            9.141355037689209,
+            9.327339887619019
+          ],
+          "frequency_per_minute": [
+            0.0,
+            6.2233646119396155,
+            1.0161886493163,
+            321.5208659123662,
+            0.9973708318853798,
+            3600.9821709641415,
+            6.632421318510649,
+            3.1221804370889643,
+            49.812788037246435,
+            0.8061980075173124,
+            6.058132042347905,
+            1.1066221155293339,
+            6.010014531985294,
+            6.563578348354694,
+            6.432702219809012
+          ],
+          "total_bytes": [
+            751,
+            751,
+            832,
+            2391,
+            800,
+            721,
+            751,
+            298388,
+            742,
+            751,
+            83331,
+            1150,
+            751,
+            751,
+            495
+          ]
+        }
+      },
+      "lstm_confidence": 100.0,
+      "lstm_risk": "Critical"
+    }
+  ],
+  "engine_results": {
+    "rita": [
+      {
+        "src_ip": "192.168.56.5",
+        "dst_ip": "::",
+        "dst_host": "www.amazon.com",
+        "dst_port": "80",
+        "protocol": "tcp",
+        "beacon_score": 0.518,
+        "connection_count": 15.0,
+        "total_duration": 228.518504,
+        "total_bytes": 410676.0,
+        "display_state": "below_alert_threshold",
+        "rita": {
+          "protocol": "tcp",
+          "beacon_score": 0.518,
+          "destination_host": "www.amazon.com",
+          "timestamp_score": 0.071,
+          "datasize_score": 1.0,
+          "duration_score": 1.0,
+          "histogram_score": 0.0,
+          "ts_intervals": [
+            0.0,
+            1.0,
+            9.0,
+            10.0,
+            19.0,
+            54.0,
+            59.0,
+            60.0,
+            75.0
+          ],
+          "ts_interval_counts": [
+            1.0,
+            2.0,
+            4.0,
+            2.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "connection_count": 15.0,
+          "total_duration": 228.518504,
+          "total_bytes": 410676.0,
+          "long_connection": 0.0,
+          "c2_over_dns": 0.0,
+          "subdomain_count": 0.0,
+          "threat_intelligence": 0,
+          "evidence_source": "rita_mixtape",
+          "ds_sizes": [
+            627.0,
+            675.0,
+            696.0,
+            707.0,
+            867.0,
+            1104.0,
+            1187.0,
+            2425.0
+          ],
+          "ds_size_counts": [
+            1.0,
+            1.0,
+            1.0,
+            8.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "available_fields": [
+            "beacon_score",
+            "c2_over_dns_score",
+            "count",
+            "ds_score",
+            "ds_size_counts",
+            "ds_sizes",
+            "dst",
+            "dur_score",
+            "fqdn",
+            "hist_score",
+            "long_conn_score",
+            "port_proto_service",
+            "src",
+            "subdomain_count",
+            "threat_intel_score",
+            "total_bytes",
+            "total_duration",
+            "ts_interval_counts",
+            "ts_intervals",
+            "ts_score"
+          ],
+          "connection_sequence": {
+            "indexes": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13,
+              14,
+              15
+            ],
+            "interval_seconds": [
+              0.0,
+              9.641087055206299,
+              59.04415488243103,
+              0.1866130828857422,
+              60.15816593170166,
+              0.016662120819091797,
+              9.046469926834106,
+              19.217339038848877,
+              1.204509973526001,
+              74.42340397834778,
+              9.904042959213257,
+              54.21905016899109,
+              9.983336925506592,
+              9.141355037689209,
+              9.327339887619019
+            ],
+            "frequency_per_minute": [
+              0.0,
+              6.2233646119396155,
+              1.0161886493163,
+              321.5208659123662,
+              0.9973708318853798,
+              3600.9821709641415,
+              6.632421318510649,
+              3.1221804370889643,
+              49.812788037246435,
+              0.8061980075173124,
+              6.058132042347905,
+              1.1066221155293339,
+              6.010014531985294,
+              6.563578348354694,
+              6.432702219809012
+            ],
+            "total_bytes": [
+              751,
+              751,
+              832,
+              2391,
+              800,
+              721,
+              751,
+              298388,
+              742,
+              751,
+              83331,
+              1150,
+              751,
+              751,
+              495
+            ]
+          }
+        }
+      },
+      {
+        "src_ip": "192.168.56.5",
+        "dst_ip": "::",
+        "dst_host": "www.amazon.com",
+        "dst_port": "",
+        "protocol": "",
+        "beacon_score": 0.0,
+        "connection_count": 0.0,
+        "total_duration": 0.0,
+        "total_bytes": 0.0,
+        "display_state": "below_alert_threshold",
+        "rita": {
+          "beacon_score": 0.0,
+          "destination_host": "www.amazon.com",
+          "timestamp_score": 0.0,
+          "datasize_score": 0.0,
+          "duration_score": 0.0,
+          "histogram_score": 0.0,
+          "connection_count": 0.0,
+          "total_duration": 0.0,
+          "total_bytes": 0.0,
+          "long_connection": 0.0,
+          "c2_over_dns": 0.0,
+          "subdomain_count": 0.0,
+          "threat_intelligence": 0,
+          "available_fields": [
+            "beacon_score",
+            "c2_over_dns_score",
+            "count",
+            "ds_score",
+            "ds_size_counts",
+            "ds_sizes",
+            "dst",
+            "dur_score",
+            "fqdn",
+            "hist_score",
+            "long_conn_score",
+            "port_proto_service",
+            "src",
+            "subdomain_count",
+            "threat_intel_score",
+            "total_bytes",
+            "total_duration",
+            "ts_interval_counts",
+            "ts_intervals",
+            "ts_score"
+          ],
+          "evidence_source": "rita_mixtape"
+        }
+      }
+    ],
+    "lstm": {
+      "status": "completed",
+      "beacons": [
+        {
+          "src": "192.168.56.5",
+          "dst": "192.168.56.4",
+          "port": "80",
+          "proto": "tcp",
+          "confidence": 100.0,
+          "risk": "Critical",
+          "event_count": 10,
+          "flow_gap": 0.017,
+          "gap_cv": 1.078
+        }
+      ],
+      "total_connections": 1,
+      "total_flagged": 1,
+      "threshold": 0.99,
+      "total_windows": 6,
+      "inference_batch_size": 512,
+      "summary_text": "The all-TCP LSTM beacon detection model analyzed 1 connection groups and flagged **1** as potential C2 beacons."
+    }
+  },
+  "attribution": {
+    "threat_feature": {
+      "src_ip": "192.168.56.5",
+      "dst_ip": "192.168.56.4",
+      "dst_port": "80",
+      "protocol": "tcp",
+      "detection_sources": [
+        "RITA",
+        "LSTM"
+      ],
+      "beacon_score": 51.800000000000004,
+      "long_conn_value": 0.0,
+      "c2_over_dns_value": 0.0,
+      "threat_category": "high",
+      "connection_count": 15,
+      "total_bytes": 410676,
+      "rita": {
+        "protocol": "tcp",
+        "beacon_score": 0.518,
+        "destination_host": "www.amazon.com",
+        "timestamp_score": 0.071,
+        "datasize_score": 1.0,
+        "duration_score": 1.0,
+        "histogram_score": 0.0,
+        "ts_intervals": [
+          0.0,
+          1.0,
+          9.0,
+          10.0,
+          19.0,
+          54.0,
+          59.0,
+          60.0,
+          75.0
+        ],
+        "ts_interval_counts": [
+          1.0,
+          2.0,
+          4.0,
+          2.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "connection_count": 15.0,
+        "total_duration": 228.518504,
+        "total_bytes": 410676.0,
+        "long_connection": 0.0,
+        "c2_over_dns": 0.0,
+        "subdomain_count": 0.0,
+        "threat_intelligence": 0,
+        "evidence_source": "rita_mixtape",
+        "ds_sizes": [
+          627.0,
+          675.0,
+          696.0,
+          707.0,
+          867.0,
+          1104.0,
+          1187.0,
+          2425.0
+        ],
+        "ds_size_counts": [
+          1.0,
+          1.0,
+          1.0,
+          8.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "available_fields": [
+          "beacon_score",
+          "c2_over_dns_score",
+          "count",
+          "ds_score",
+          "ds_size_counts",
+          "ds_sizes",
+          "dst",
+          "dur_score",
+          "fqdn",
+          "hist_score",
+          "long_conn_score",
+          "port_proto_service",
+          "src",
+          "subdomain_count",
+          "threat_intel_score",
+          "total_bytes",
+          "total_duration",
+          "ts_interval_counts",
+          "ts_intervals",
+          "ts_score"
+        ],
+        "connection_sequence": {
+          "indexes": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15
+          ],
+          "interval_seconds": [
+            0.0,
+            9.641087055206299,
+            59.04415488243103,
+            0.1866130828857422,
+            60.15816593170166,
+            0.016662120819091797,
+            9.046469926834106,
+            19.217339038848877,
+            1.204509973526001,
+            74.42340397834778,
+            9.904042959213257,
+            54.21905016899109,
+            9.983336925506592,
+            9.141355037689209,
+            9.327339887619019
+          ],
+          "frequency_per_minute": [
+            0.0,
+            6.2233646119396155,
+            1.0161886493163,
+            321.5208659123662,
+            0.9973708318853798,
+            3600.9821709641415,
+            6.632421318510649,
+            3.1221804370889643,
+            49.812788037246435,
+            0.8061980075173124,
+            6.058132042347905,
+            1.1066221155293339,
+            6.010014531985294,
+            6.563578348354694,
+            6.432702219809012
+          ],
+          "total_bytes": [
+            751,
+            751,
+            832,
+            2391,
+            800,
+            721,
+            751,
+            298388,
+            742,
+            751,
+            83331,
+            1150,
+            751,
+            751,
+            495
+          ]
+        }
+      },
+      "lstm_confidence": 100.0,
+      "lstm_risk": "Critical"
+    },
+    "query": "使用以下特征的 APT 组织: statistically detected periodic command and control beacon, high confidence machine learning detected C2 beacon, independent RITA and LSTM agreement on C2 behavior, TCP protocol traffic, HTTP web protocols for command and control",
+    "candidates": [
+      {
+        "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb",
+        "name": "APT42",
+        "distance": 1.1256508827209473,
+        "score": 0.5304441393122592,
+        "metadata": {
+          "name": "APT42",
+          "aliases": [
+            "APT42"
+          ],
+          "mitre_url": "https://attack.mitre.org/groups/G1044",
+          "technique_count": 32,
+          "c2_technique_count": 4,
+          "c2_techniques": [
+            "T1132.001",
+            "T1102",
+            "T1071.001",
+            "T1573.002"
+          ],
+          "matched_techniques": [
+            "T1071.001",
+            "T1573.002",
+            "T1102",
+            "T1132.001"
+          ],
+          "background": "[APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou",
+          "associated_software": "NICECURL, TAMECAT",
+          "matched_technique_details": [
+            {
+              "id": "T1071.001",
+              "name": "Web Protocols",
+              "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling)",
+              "name_zh": "Web 协议",
+              "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 使用过 [NICECURL](https://attack.mitre.org/software/S1192) 等工具，并通过 HTTPS 进行命令与控制通信。(引用：Mandiant APT42-untangling)",
+              "description_zh": "adversaries 可能使用与应用层协议 associated with web traffic 来避免检测/网络过滤，通过融入现有流量。对远程系统的命令以及这些命令的结果通常会被嵌入到客户端和服务器之间的协议流量中。携带 Web 流量的协议如 HTTP/S（引用：CrowdStrike Putter Panda）和 WebSocket（引用：Brazking-Websockets）在环境中可能非常常见。HTTP/S 包具有许多可以隐藏数据的字段和头部。敌手可能会滥用这些协议与受害者网络中受其控制的系统通信，同时模仿正常、预期的流量。"
+            },
+            {
+              "id": "T1573.002",
+              "name": "Asymmetric Cryptography",
+              "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling)",
+              "name_zh": "非对称加密",
+              "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 使用过 [NICECURL](https://attack.mitre.org/software/S1192) 等工具，并通过 HTTPS 进行命令与控制通信。(引用：Mandiant APT42-untangling)",
+              "description_zh": "敌方可能采用已知的非对称加密算法来隐藏命令与控制流量，而不是依赖于通信协议提供的任何固有保护。非对称密码学，也称为公钥密码学，为每个参与方使用一对密钥：一个可以自由分发的公钥和一个私有的私钥。由于密钥的生成方式，发送方使用接收方的公钥对数据进行加密，而接收方使用其私钥对数据进行解密。这确保了只有预期的接收方才能读取加密数据。常见的公钥加密算法包括 RSA 和 ElGamal。出于效率考虑，许多协议（包括 SSL/TLS）在连接建立后使用对称密码学，但使用非对称密码学来建立或传输密钥。因此，这些协议被归类于 [非对称加密](https://attack.mitre.org/techniques/T1573/002)。"
+            },
+            {
+              "id": "T1102",
+              "name": "Web Service",
+              "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has used various links, such as links with typo-squatted domains, links to Dropbox files and links to fake Google sites, in spearphishing operations.(Citation: Mandiant APT42-untangling)(Citation: Mandiant APT42-charms)(Citation: TAG APT42)",
+              "name_zh": "Web 服务",
+              "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 在网络钓鱼行动中使用过多种链接，例如拼写冒用的域名链接、指向 Dropbox 文件的链接以及假冒的 Google 网站链接。（引用：Mandiant APT42-untangling）（引用：Mandiant APT42-charms）（引用：TAG APT42）",
+              "description_zh": "adversary 可能利用现有的合法外部 Web 服务作为中继数据到/从被入侵系统的手段。流行网站、云服务和社交媒体作为 C2 机制，由于在遭受入侵之前网络中的主机很可能已经与这些服务进行通信，因此可以为攻击者提供大量的掩护。使用常见服务，如 Google、Microsoft 或 Twitter 提供的服务，使得攻击者更容易隐藏在预期的噪声中。（来源：Broadcom BirdyClient Microsoft Graph API 2024）Web 服务提供商通常使用 SSL/TLS 加密，这为攻击者提供了额外的保护级别。使用 Web 服务还可以通过对恶意软件二进制分析防止后端 C2 基础设施被发现，同时实现运营弹性（因为该基础设施可能会动态更改）。"
+            },
+            {
+              "id": "T1132.001",
+              "name": "Standard Encoding",
+              "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has encoded C2 traffic with Base64.(Citation: Mandiant APT42-untangling)",
+              "name_zh": "标准编码",
+              "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 使用 Base64 对 C2 流量进行了编码。（出处：Mandiant APT42-untangling）",
+              "description_zh": "敌方可能使用标准数据编码系统对数据进行编码，使指挥和控制（C2）流量中的内容更难以被检测。C2信息可以使用符合现有协议规范的标准数据编码系统进行编码。常见的数据编码方案包括ASCII、Unicode、十六进制、Base64和MIME。（引用：Wikipedia Binary-to-text Encoding）（引用：Wikipedia Character Encoding）某些数据编码系统还可能产生数据压缩，例如gzip。"
+            }
+          ],
+          "background_zh": "[APT42](https://attack.mitre.org/groups/G1044) 是一个由伊朗支持的威胁组织，从事网络间谍活动和监视。(Citation: Mandiant APT42-charms) 该组织主要关注中东地区的目标，但自2015年以来已针对各种行业和国家发动攻击。(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) 通过鱼叉式网络钓鱼邮件和/或PINEFLOWER Android恶意软件发起网络行动，然后监控并从受损系统和设备中收集信息。(Citation: Mandiant APT42-charms) 最后，[APT42](https://attack.mitre.org/groups/G1044) 使用原生功能和开源工具进行数据外泄。(Citation: Mandiant APT42-untangling) 其他商业厂商已将[APT42](https://attack.mitre.org/groups/G1044)的活动与[Magic Hound](https://attack.mitre.org/groups/G0059)联系起来。尽管[Magic Hound](https://attack.mitre.org/groups/G0059)和[APT42](https://attack.mitre.org/groups/G1044)之间存在行为与软件重叠，但它们似乎是不同的实体，并由其来源厂商作为不同实体进行追踪。"
+        },
+        "text": "Group: APT42\nAliases: APT42\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT",
+        "evidence_chunks": [
+          {
+            "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1071.001",
+            "score": 0.47044413931225915,
+            "distance": 1.1256508827209473,
+            "technique_id": "T1071.001",
+            "technique_name": "Web Protocols",
+            "text": "Group: APT42\nAliases: APT42\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+          },
+          {
+            "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1573.002",
+            "score": 0.4496808826572348,
+            "distance": 1.223799228668213,
+            "technique_id": "T1573.002",
+            "technique_name": "Asymmetric Cryptography",
+            "text": "Group: APT42\nAliases: APT42\nTechnique: T1573.002 Asymmetric Cryptography\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+          },
+          {
+            "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1102",
+            "score": 0.4458805704986654,
+            "distance": 1.242753028869629,
+            "technique_id": "T1102",
+            "technique_name": "Web Service",
+            "text": "Group: APT42\nAliases: APT42\nTechnique: T1102 Web Service\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used various links, such as links with typo-squatted domains, links to Dropbox files and links to fake Google sites, in spearphishing operations.(Citation: Mandiant APT42-untangling)(Citation: Mandiant APT42-charms)(Citation: TAG APT42) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+          },
+          {
+            "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1132.001",
+            "score": 0.4434707028950543,
+            "distance": 1.254940390586853,
+            "technique_id": "T1132.001",
+            "technique_name": "Standard Encoding",
+            "text": "Group: APT42\nAliases: APT42\nTechnique: T1132.001 Standard Encoding\nTactic: Command and Control\nEvidence:  [APT42](https://attack.mitre.org/groups/G1044) has encoded C2 traffic with Base64.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+          }
+        ]
+      },
+      {
+        "id": "intrusion-set--44e43fad-ffcb-4210-abcf-eaaed9735f80",
+        "name": "APT39",
+        "distance": 1.2013801336288452,
+        "score": 0.5142604817422237,
+        "metadata": {
+          "name": "APT39",
+          "aliases": [
+            "APT39",
+            "ITG07",
+            "Chafer",
+            "Remix Kitten"
+          ],
+          "mitre_url": "https://attack.mitre.org/groups/G0087",
+          "technique_count": 53,
+          "c2_technique_count": 6,
+          "c2_techniques": [
+            "T1090.002",
+            "T1102.002",
+            "T1105",
+            "T1071.004",
+            "T1071.001",
+            "T1090.001"
+          ],
+          "matched_techniques": [
+            "T1071.001",
+            "T1090.002",
+            "T1090.001"
+          ],
+          "background": "[APT39](https://attack.mitre.org/groups/G0087) is one of several names for cyber espionage activity conducted by the Iranian Ministry of Intelligence and Security (MOIS) through the front company Rana Intelligence Computing since at least 2014. [APT39](https://attack.mitre.org/groups/G0087) has primarily targeted the travel, hospitality, academic, and telecommunications industries in Iran and across Asia, Africa, Europe, and North America to track individuals and entities considered to be a threat by the MOIS.(Citation: FireEye APT39 Jan 2019)(Citation: Symantec Chafer Dec 2015)(Citation: FBI FLASH APT39 September 2020)(Citation: Dept. of Treasury Iran Sanctions September 2020)(Citation: DOJ",
+          "associated_software": "NBTscan, MechaFlounder, Remexi, CrackMapExec, pwdump, Mimikatz, Windows Credential Editor, Cadelspy, PsExec, ASPXSpy",
+          "matched_technique_details": [
+            {
+              "id": "T1071.001",
+              "name": "Web Protocols",
+              "evidence": "[APT39](https://attack.mitre.org/groups/G0087) has used HTTP in communications with C2.(Citation: BitDefender Chafer May 2020)(Citation: FBI FLASH APT39 September 2020)",
+              "name_zh": "Web 协议",
+              "evidence_zh": "[APT39](https://attack.mitre.org/groups/G0087) 在与其 C2（命令与控制）的通信中使用了 HTTP。（来源：BitDefender Chafer May 2020）（来源：FBI FLASH APT39 September 2020）",
+              "description_zh": "adversaries 可能使用与应用层协议 associated with web traffic 来避免检测/网络过滤，通过融入现有流量。对远程系统的命令以及这些命令的结果通常会被嵌入到客户端和服务器之间的协议流量中。携带 Web 流量的协议如 HTTP/S（引用：CrowdStrike Putter Panda）和 WebSocket（引用：Brazking-Websockets）在环境中可能非常常见。HTTP/S 包具有许多可以隐藏数据的字段和头部。敌手可能会滥用这些协议与受害者网络中受其控制的系统通信，同时模仿正常、预期的流量。"
+            },
+            {
+              "id": "T1090.002",
+              "name": "External Proxy",
+              "evidence": "[APT39](https://attack.mitre.org/groups/G0087) has used various tools to proxy C2 communications.(Citation: BitDefender Chafer May 2020)",
+              "name_zh": "外部代理",
+              "evidence_zh": "[APT39](https://attack.mitre.org/groups/G0087) 已使用多种工具来代理 C2 通信。（Citation: BitDefender Chafer May 2020）",
+              "description_zh": "敌方可能使用外部代理作为中间人来与命令和控制服务器进行网络通信，从而避免直接连接到其基础设施。存在许多支持通过代理或端口重定向转发流量的工具，包括 [HTRAN](https://attack.mitre.org/software/S0040)、ZXProxy 和 ZXPortMap。（来源：Trend Micro APT Attack Tools）敌方利用这类代理来管理命令和控制通信，以在连接丢失时提供弹性，或借助已有的可信通信路径以避免引起怀疑。外部连接代理用于掩盖命令和控制流量的目标，通常通过端口重定向器实现。此类用途可利用受害者环境之外的被入侵系统，或利用购买的资源（如基于云的资源或虚拟专用服务器）。由于从被入侵系统连接到这些代理的关联性较低，因此不太可能受到调查。受害者系统会直接与互联网上的外部代理通信，随后该代理会将通信转发至命令和控制服务器。"
+            },
+            {
+              "id": "T1090.001",
+              "name": "Internal Proxy",
+              "evidence": "[APT39](https://attack.mitre.org/groups/G0087) used custom tools to create SOCK5 and custom protocol proxies between infected hosts.(Citation: FireEye APT39 Jan 2019)(Citation: BitDefender Chafer May 2020)",
+              "name_zh": "内部代理",
+              "evidence_zh": "[APT39](https://attack.mitre.org/groups/G0087) 使用定制工具在受感染的计算机之间创建 SOCK5 和自定义协议代理。(Citation: FireEye APT39 Jan 2019)(Citation: BitDefender Chafer May 2020)",
+              "description_zh": "adversary 可能会使用内部代理来在受污染环境中的两个或多个系统之间定向命令和控制（C2）流量。许多工具支持通过代理或端口重定向实现流量转发，包括 [HTRAN](https://attack.mitre.org/software/S0040)、ZXProxy 和 ZXPortMap。（来源：Trend Micro APT Attack Tools）对抗者使用内部代理来管理受污染环境内的命令与控制通信，以减少同时向外发出的网络连接数量，在连接丢失的情况下提供韧性，或者利用被感染系统之间已有的可信通信路径以避免引起怀疑。内部代理连接可能使用常见的点对点（p2p）网络协议，例如 SMB，以更好地融入环境。通过使用被攻陷的内部系统作为代理，对抗者可以隐藏 C2 流量的真实目的地，同时减少对大量外部系统连接的需求。"
+            }
+          ],
+          "background_zh": "[APT39](https://attack.mitre.org/groups/G0087) 是伊朗情报与安全部（MOIS）自至少2014年以来通过壳公司 Rana Intelligence Computing 实施的网络间谍活动所使用的多个名称之一。[APT39](https://attack.mitre.org/groups/G0087) 主要针对伊朗以及亚洲、非洲、欧洲和北美的旅行、酒店、学术和电信行业，以追踪被 MOIS 视为威胁的个人和实体。(Citation: FireEye APT39 Jan 2019)(Citation: Symantec Chafer Dec 2015)(Citation: FBI FLASH APT39 September 2020)(Citation: Dept. of Treasury Iran Sanctions September 2020)(Citation: DOJ Iran Indictments September 2020)"
+        },
+        "text": "Group: APT39\nAliases: APT39, ITG07, Chafer, Remix Kitten\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT39](https://attack.mitre.org/groups/G0087) has used HTTP in communications with C2.(Citation: BitDefender Chafer May 2020)(Citation: FBI FLASH APT39 September 2020)\nGroup description: [APT39](https://attack.mitre.org/groups/G0087) is one of several names for cyber espionage activity conducted by the Iranian Ministry of Intelligence and Security (MOIS) through the front company Rana Intelligence Computing since at least 2014. [APT39](https://attack.mitre.org/groups/G0087) has primarily targeted the travel, hospitality, academic, and telecommunications industries in Iran and across Asia, Africa, Europe, and North America to track individuals and entities considered to be a threat by the MOIS.(Citation: FireEye APT39 Jan 2019)(Citation: Symantec Chafer Dec 2015)(Citation: FBI FLASH APT39 September 2020)(Citation: Dept. of Treasury Iran Sanctions September 2020)(Citation: DOJ\nAssociated software/tools: NBTscan, MechaFlounder, Remexi, CrackMapExec, pwdump, Mimikatz, Windows Credential Editor, Cadelspy, PsExec, ASPXSpy",
+        "evidence_chunks": [
+          {
+            "id": "intrusion-set--44e43fad-ffcb-4210-abcf-eaaed9735f80::T1071.001",
+            "score": 0.4542604817422237,
+            "distance": 1.2013801336288452,
+            "technique_id": "T1071.001",
+            "technique_name": "Web Protocols",
+            "text": "Group: APT39\nAliases: APT39, ITG07, Chafer, Remix Kitten\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT39](https://attack.mitre.org/groups/G0087) has used HTTP in communications with C2.(Citation: BitDefender Chafer May 2020)(Citation: FBI FLASH APT39 September 2020)\nGroup description: [APT39](https://attack.mitre.org/groups/G0087) is one of several names for cyber espionage activity conducted by the Iranian Ministry of Intelligence and Security (MOIS) through the front company Rana Intelligence Computing since at least 2014. [APT39](https://attack.mitre.org/groups/G0087) has primarily targeted the travel, hospitality, academic, and telecommunications industries in Iran and across Asia, Africa, Europe, and North America to track individuals and entities considered to be a threat by the MOIS.(Citation: FireEye APT39 Jan 2019)(Citation: Symantec Chafer Dec 2015)(Citation: FBI FLASH APT39 September 2020)(Citation: Dept. of Treasury Iran Sanctions September 2020)(Citation: DOJ\nAssociated software/tools: NBTscan, MechaFlounder, Remexi, CrackMapExec, pwdump, Mimikatz, Windows Credential Editor, Cadelspy, PsExec, ASPXSpy"
+          },
+          {
+            "id": "intrusion-set--44e43fad-ffcb-4210-abcf-eaaed9735f80::T1090.002",
+            "score": 0.4453664960437035,
+            "distance": 1.2453417778015137,
+            "technique_id": "T1090.002",
+            "technique_name": "External Proxy",
+            "text": "Group: APT39\nAliases: APT39, ITG07, Chafer, Remix Kitten\nTechnique: T1090.002 External Proxy\nTactic: Command and Control\nEvidence: [APT39](https://attack.mitre.org/groups/G0087) has used various tools to proxy C2 communications.(Citation: BitDefender Chafer May 2020)\nGroup description: [APT39](https://attack.mitre.org/groups/G0087) is one of several names for cyber espionage activity conducted by the Iranian Ministry of Intelligence and Security (MOIS) through the front company Rana Intelligence Computing since at least 2014. [APT39](https://attack.mitre.org/groups/G0087) has primarily targeted the travel, hospitality, academic, and telecommunications industries in Iran and across Asia, Africa, Europe, and North America to track individuals and entities considered to be a threat by the MOIS.(Citation: FireEye APT39 Jan 2019)(Citation: Symantec Chafer Dec 2015)(Citation: FBI FLASH APT39 September 2020)(Citation: Dept. of Treasury Iran Sanctions September 2020)(Citation: DOJ\nAssociated software/tools: NBTscan, MechaFlounder, Remexi, CrackMapExec, pwdump, Mimikatz, Windows Credential Editor, Cadelspy, PsExec, ASPXSpy"
+          },
+          {
+            "id": "intrusion-set--44e43fad-ffcb-4210-abcf-eaaed9735f80::T1090.001",
+            "score": 0.4424435247640182,
+            "distance": 1.2601754665374756,
+            "technique_id": "T1090.001",
+            "technique_name": "Internal Proxy",
+            "text": "Group: APT39\nAliases: APT39, ITG07, Chafer, Remix Kitten\nTechnique: T1090.001 Internal Proxy\nTactic: Command and Control\nEvidence: [APT39](https://attack.mitre.org/groups/G0087) used custom tools to create SOCK5 and custom protocol proxies between infected hosts.(Citation: FireEye APT39 Jan 2019)(Citation: BitDefender Chafer May 2020)\nGroup description: [APT39](https://attack.mitre.org/groups/G0087) is one of several names for cyber espionage activity conducted by the Iranian Ministry of Intelligence and Security (MOIS) through the front company Rana Intelligence Computing since at least 2014. [APT39](https://attack.mitre.org/groups/G0087) has primarily targeted the travel, hospitality, academic, and telecommunications industries in Iran and across Asia, Africa, Europe, and North America to track individuals and entities considered to be a threat by the MOIS.(Citation: FireEye APT39 Jan 2019)(Citation: Symantec Chafer Dec 2015)(Citation: FBI FLASH APT39 September 2020)(Citation: Dept. of Treasury Iran Sanctions September 2020)(Citation: DOJ\nAssociated software/tools: NBTscan, MechaFlounder, Remexi, CrackMapExec, pwdump, Mimikatz, Windows Credential Editor, Cadelspy, PsExec, ASPXSpy"
+          }
+        ]
+      },
+      {
+        "id": "intrusion-set--38fd6a28-3353-4f2b-bb2b-459fecd5c648",
+        "name": "APT18",
+        "distance": 1.095176100730896,
+        "score": 0.5072868493732593,
+        "metadata": {
+          "name": "APT18",
+          "aliases": [
+            "APT18",
+            "TG-0416",
+            "Dynamite Panda",
+            "Threat Group-0416"
+          ],
+          "mitre_url": "https://attack.mitre.org/groups/G0026",
+          "technique_count": 12,
+          "c2_technique_count": 3,
+          "c2_techniques": [
+            "T1105",
+            "T1071.004",
+            "T1071.001"
+          ],
+          "matched_techniques": [
+            "T1071.001",
+            "T1071.004"
+          ],
+          "background": "[APT18](https://attack.mitre.org/groups/G0026) is a threat group that has operated since at least 2009 and has targeted a range of industries, including technology, manufacturing, human rights groups, government, and medical. (Citation: Dell Lateral Movement)",
+          "associated_software": "hcdLoader, gh0st RAT, cmd, Pisloader, HTTPBrowser",
+          "matched_technique_details": [
+            {
+              "id": "T1071.001",
+              "name": "Web Protocols",
+              "evidence": "[APT18](https://attack.mitre.org/groups/G0026) uses HTTP for C2 communications.(Citation: PaloAlto DNS Requests May 2016)",
+              "name_zh": "Web 协议",
+              "evidence_zh": "[APT18](https://attack.mitre.org/groups/G0026) 使用 HTTP 进行 C2 通信。(Citation: PaloAlto DNS Requests May 2016)",
+              "description_zh": "adversaries 可能使用与应用层协议 associated with web traffic 来避免检测/网络过滤，通过融入现有流量。对远程系统的命令以及这些命令的结果通常会被嵌入到客户端和服务器之间的协议流量中。携带 Web 流量的协议如 HTTP/S（引用：CrowdStrike Putter Panda）和 WebSocket（引用：Brazking-Websockets）在环境中可能非常常见。HTTP/S 包具有许多可以隐藏数据的字段和头部。敌手可能会滥用这些协议与受害者网络中受其控制的系统通信，同时模仿正常、预期的流量。"
+            },
+            {
+              "id": "T1071.004",
+              "name": "DNS",
+              "evidence": "[APT18](https://attack.mitre.org/groups/G0026) uses DNS for C2 communications.(Citation: PaloAlto DNS Requests May 2016)",
+              "name_zh": "DNS",
+              "evidence_zh": "[APT18](https://attack.mitre.org/groups/G0026) 使用 DNS 进行 C2 通信。（Citation: PaloAlto DNS Requests May 2016）",
+              "description_zh": "对手可能使用域名系统（DNS）应用层协议进行通信，以通过融入现有流量来避免检测/网络过滤。发送给远程系统的命令以及这些命令的结果通常嵌入在客户端和服务器之间的协议流量中。DNS 协议在计算机网络中具有管理功能，因此在环境中可能非常普遍。即使在网络身份验证完成之前，也可能会允许 DNS 流量。DNS 数据包包含许多可以隐藏数据的字段和标头。通常称为 DNS 隧道，对手可以利用 DNS 与受害者网络内受其控制的系统进行通信，同时模仿正常、预期的流量。(Citation: PAN DNS Tunneling)(Citation: Medium DnsTunneling) 可使用 DNS 信标通过 DNS 查询向远程系统发送命令。DNS 信标是通过隧道传输 DNS 流量创建的（即 [Protocol Tunneling](https://attack.mitre.org/techniques/T1572)）。命令可以嵌入到不同的 DNS 记录中，例如 TXT 或 A 记录。(Citation: OilRig Uses Updated BONDUPDATER to Target Middle Eastern Government) DNS 信标可能难以检测，因为这些信标很少与被感染的设备进行通信。(Citation: DNS Beacons) 不频繁的通信使得恶意 DNS 流量隐藏在正常的 DNS 流量之中。"
+            }
+          ],
+          "background_zh": "[APT18](https://attack.mitre.org/groups/G0026) 是一个自至少2009年以来一直在活动的威胁组织，其目标涵盖多个行业，包括科技、制造、人权组织、政府和医疗。（引用：Dell横向移动）"
+        },
+        "text": "Group: APT18\nAliases: APT18, TG-0416, Dynamite Panda, Threat Group-0416\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT18](https://attack.mitre.org/groups/G0026) uses HTTP for C2 communications.(Citation: PaloAlto DNS Requests May 2016)\nGroup description: [APT18](https://attack.mitre.org/groups/G0026) is a threat group that has operated since at least 2009 and has targeted a range of industries, including technology, manufacturing, human rights groups, government, and medical. (Citation: Dell Lateral Movement)\nAssociated software/tools: hcdLoader, gh0st RAT, cmd, Pisloader, HTTPBrowser",
+        "evidence_chunks": [
+          {
+            "id": "intrusion-set--38fd6a28-3353-4f2b-bb2b-459fecd5c648::T1071.001",
+            "score": 0.4772868493732593,
+            "distance": 1.095176100730896,
+            "technique_id": "T1071.001",
+            "technique_name": "Web Protocols",
+            "text": "Group: APT18\nAliases: APT18, TG-0416, Dynamite Panda, Threat Group-0416\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT18](https://attack.mitre.org/groups/G0026) uses HTTP for C2 communications.(Citation: PaloAlto DNS Requests May 2016)\nGroup description: [APT18](https://attack.mitre.org/groups/G0026) is a threat group that has operated since at least 2009 and has targeted a range of industries, including technology, manufacturing, human rights groups, government, and medical. (Citation: Dell Lateral Movement)\nAssociated software/tools: hcdLoader, gh0st RAT, cmd, Pisloader, HTTPBrowser"
+          },
+          {
+            "id": "intrusion-set--38fd6a28-3353-4f2b-bb2b-459fecd5c648::T1071.004",
+            "score": 0.44330887807014596,
+            "distance": 1.2557635307312012,
+            "technique_id": "T1071.004",
+            "technique_name": "DNS",
+            "text": "Group: APT18\nAliases: APT18, TG-0416, Dynamite Panda, Threat Group-0416\nTechnique: T1071.004 DNS\nTactic: Command and Control\nEvidence: [APT18](https://attack.mitre.org/groups/G0026) uses DNS for C2 communications.(Citation: PaloAlto DNS Requests May 2016)\nGroup description: [APT18](https://attack.mitre.org/groups/G0026) is a threat group that has operated since at least 2009 and has targeted a range of industries, including technology, manufacturing, human rights groups, government, and medical. (Citation: Dell Lateral Movement)\nAssociated software/tools: hcdLoader, gh0st RAT, cmd, Pisloader, HTTPBrowser"
+          }
+        ]
+      },
+      {
+        "id": "intrusion-set--bef4c620-0787-42a8-a96d-b7eb6e85917c",
+        "name": "APT28",
+        "distance": 1.1496126651763916,
+        "score": 0.4952000875320218,
+        "metadata": {
+          "name": "APT28",
+          "aliases": [
+            "FROZENLAKE",
+            "STRONTIUM",
+            "Fancy Bear",
+            "Pawn Storm",
+            "GruesomeLarch",
+            "APT28",
+            "Tsar Team",
+            "Sofacy",
+            "SNAKEMACKEREL",
+            "IRON TWILIGHT",
+            "Swallowtail",
+            "Group 74",
+            "Threat Group-4127",
+            "TG-4127",
+            "Forest Blizzard",
+            "Sednit"
+          ],
+          "mitre_url": "https://attack.mitre.org/groups/G0007",
+          "technique_count": 93,
+          "c2_technique_count": 9,
+          "c2_techniques": [
+            "T1090.002",
+            "T1090.003",
+            "T1105",
+            "T1071.001",
+            "T1071.003",
+            "T1092",
+            "T1102.002",
+            "T1001.001",
+            "T1573.001"
+          ],
+          "matched_techniques": [
+            "T1071.001",
+            "T1090.002"
+          ],
+          "background": "[APT28](https://attack.mitre.org/groups/G0007) is a threat group that has been attributed to Russia's General Staff Main Intelligence Directorate (GRU) 85th Main Special Service Center (GTsSS) military unit 26165.(Citation: NSA/FBI Drovorub August 2020)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021) This group has been active since at least 2004.(Citation: DOJ GRU Indictment Jul 2018)(Citation: Ars Technica GRU indictment Jul 2018)(Citation: Crowdstrike DNC June 2016)(Citation: FireEye APT28)(Citation: SecureWorks TG-4127)(Citation: FireEye APT28 January 2017)(Citation: GRIZZLY STEPPE JAR)(Citation: Sofacy DealersChoice)(Citation: Palo Alto Sofacy 06-2018)(Citation: Sym",
+          "associated_software": "Wevtutil, certutil, CHOPSTICK, Net, Forfiles, DealersChoice, Mimikatz, ADVSTORESHELL, Cannon, Komplex",
+          "matched_technique_details": [
+            {
+              "id": "T1071.001",
+              "name": "Web Protocols",
+              "evidence": "Later implants used by [APT28](https://attack.mitre.org/groups/G0007), such as [CHOPSTICK](https://attack.mitre.org/software/S0023), use a blend of HTTP, HTTPS, and other legitimate channels for C2, depending on module configuration.(Citation: FireEye APT28)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021)",
+              "name_zh": "Web 协议",
+              "evidence_zh": "此后由[APT28](https://attack.mitre.org/groups/G0007)使用的植入程序（例如[CHOPSTICK](https://attack.mitre.org/software/S0023)）使用HTTP、HTTPS和其他合法信道的混合体作为C2，具体取决于模块配置。（来源：FireEye APT28）（来源：Cybersecurity Advisory GRU Brute Force Campaign July 2021）",
+              "description_zh": "adversaries 可能使用与应用层协议 associated with web traffic 来避免检测/网络过滤，通过融入现有流量。对远程系统的命令以及这些命令的结果通常会被嵌入到客户端和服务器之间的协议流量中。携带 Web 流量的协议如 HTTP/S（引用：CrowdStrike Putter Panda）和 WebSocket（引用：Brazking-Websockets）在环境中可能非常常见。HTTP/S 包具有许多可以隐藏数据的字段和头部。敌手可能会滥用这些协议与受害者网络中受其控制的系统通信，同时模仿正常、预期的流量。"
+            },
+            {
+              "id": "T1090.002",
+              "name": "External Proxy",
+              "evidence": "[APT28](https://attack.mitre.org/groups/G0007) used other victims as proxies to relay command traffic, for instance using a compromised Georgian military email server as a hop point to NATO victims. The group has also used a tool that acts as a proxy to allow C2 even if the victim is behind a router. [APT28](https://attack.mitre.org/groups/G0007) has also used a machine to relay and obscure communications between [CHOPSTICK](https://attack.mitre.org/software/S0023) and their server.(Citation: FireEye APT28)(Citation: Bitdefender APT28 Dec 2015)(Citation: DOJ GRU Indictment Jul 2018)",
+              "name_zh": "外部代理",
+              "evidence_zh": "[APT28](https://attack.mitre.org/groups/G0007) 利用其他受害者的系统作为代理来中继命令流量，例如使用被攻陷的格鲁吉亚军方邮件服务器作为跳板来针对北约受害者。该组织还使用了一种充当代理的工具，即使在受害者位于路由器后面的情况下也能实现C2（命令与控制）通信。[APT28](https://attack.mitre.org/groups/G0007) 还曾使用一台机器来中继并隐藏[CHOPSTICK](https://attack.mitre.org/software/S0023)与其服务器之间的通信。(Citation: FireEye APT28)(Citation: Bitdefender APT28 Dec 2015)(Citation: DOJ GRU Indictment Jul 2018)",
+              "description_zh": "敌方可能使用外部代理作为中间人来与命令和控制服务器进行网络通信，从而避免直接连接到其基础设施。存在许多支持通过代理或端口重定向转发流量的工具，包括 [HTRAN](https://attack.mitre.org/software/S0040)、ZXProxy 和 ZXPortMap。（来源：Trend Micro APT Attack Tools）敌方利用这类代理来管理命令和控制通信，以在连接丢失时提供弹性，或借助已有的可信通信路径以避免引起怀疑。外部连接代理用于掩盖命令和控制流量的目标，通常通过端口重定向器实现。此类用途可利用受害者环境之外的被入侵系统，或利用购买的资源（如基于云的资源或虚拟专用服务器）。由于从被入侵系统连接到这些代理的关联性较低，因此不太可能受到调查。受害者系统会直接与互联网上的外部代理通信，随后该代理会将通信转发至命令和控制服务器。"
+            }
+          ],
+          "background_zh": "[APT28](https://attack.mitre.org/groups/G0007)是一个被归因于俄罗斯总参谋部情报总局（GRU）第85号主要特殊服务中心（GTsSS）军事单位26165的威胁组织。(Citation: NSA/FBI Drovorub August 2020)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021)该组织至少自2004年以来一直活跃。(Citation: DOJ GRU Indictment Jul 2018)(Citation: Ars Technica GRU indictment Jul 2018)(Citation: Crowdstrike DNC June 2016)(Citation: FireEye APT28)(Citation: SecureWorks TG-4127)(Citation: FireEye APT28 January 2017)(Citation: GRIZZLY STEPPE JAR)(Citation: Sofacy DealersChoice)(Citation: Palo Alto Sofacy 06-2018)(Citation: Symantec APT28 Oct 2018)(Citation: ESET Zebrocy May 2019)据报道，[APT28](https://attack.mitre.org/groups/G0007)在2016年侵入希拉里·克林顿竞选活动、美国民主党全国委员会和民主党国会竞选委员会，试图干涉美国总统选举。(Citation: Crowdstrike DNC June 2016)2018年，美国起诉了五名与[APT28](https://attack.mitre.org/groups/G0007)有关联的GRU单位26165军官，指控其在2014年至2018年间针对世界反兴奋剂机构（WADA）、美国反兴奋剂机构、美国核设施、禁止化学武器组织（OPCW）、瑞士斯皮耶兹化学实验室及其他组织实施的网络行动（包括接近式操作）。(Citation: US District Court Indictment GRU Oct 2018)部分行动是在GRU单位74455协助下进行的，该单位也被称为[Sandworm Team](https://attack.mitre.org/groups/G0034)。"
+        },
+        "text": "Group: APT28\nAliases: FROZENLAKE, STRONTIUM, Fancy Bear, Pawn Storm, GruesomeLarch, APT28, Tsar Team, Sofacy, SNAKEMACKEREL, IRON TWILIGHT, Swallowtail, Group 74, Threat Group-4127, TG-4127, Forest Blizzard, Sednit\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: Later implants used by [APT28](https://attack.mitre.org/groups/G0007), such as [CHOPSTICK](https://attack.mitre.org/software/S0023), use a blend of HTTP, HTTPS, and other legitimate channels for C2, depending on module configuration.(Citation: FireEye APT28)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021)\nGroup description: [APT28](https://attack.mitre.org/groups/G0007) is a threat group that has been attributed to Russia's General Staff Main Intelligence Directorate (GRU) 85th Main Special Service Center (GTsSS) military unit 26165.(Citation: NSA/FBI Drovorub August 2020)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021) This group has been active since at least 2004.(Citation: DOJ GRU Indictment Jul 2018)(Citation: Ars Technica GRU indictment Jul 2018)(Citation: Crowdstrike DNC June 2016)(Citation: FireEye APT28)(Citation: SecureWorks TG-4127)(Citation: FireEye APT28 January 2017)(Citation: GRIZZLY STEPPE JAR)(Citation: Sofacy DealersChoice)(Citation: Palo Alto Sofacy 06-2018)(Citation: Sym\nAssociated software/tools: Wevtutil, certutil, CHOPSTICK, Net, Forfiles, DealersChoice, Mimikatz, ADVSTORESHELL, Cannon, Komplex",
+        "evidence_chunks": [
+          {
+            "id": "intrusion-set--bef4c620-0787-42a8-a96d-b7eb6e85917c::T1071.001",
+            "score": 0.4652000875320218,
+            "distance": 1.1496126651763916,
+            "technique_id": "T1071.001",
+            "technique_name": "Web Protocols",
+            "text": "Group: APT28\nAliases: FROZENLAKE, STRONTIUM, Fancy Bear, Pawn Storm, GruesomeLarch, APT28, Tsar Team, Sofacy, SNAKEMACKEREL, IRON TWILIGHT, Swallowtail, Group 74, Threat Group-4127, TG-4127, Forest Blizzard, Sednit\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: Later implants used by [APT28](https://attack.mitre.org/groups/G0007), such as [CHOPSTICK](https://attack.mitre.org/software/S0023), use a blend of HTTP, HTTPS, and other legitimate channels for C2, depending on module configuration.(Citation: FireEye APT28)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021)\nGroup description: [APT28](https://attack.mitre.org/groups/G0007) is a threat group that has been attributed to Russia's General Staff Main Intelligence Directorate (GRU) 85th Main Special Service Center (GTsSS) military unit 26165.(Citation: NSA/FBI Drovorub August 2020)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021) This group has been active since at least 2004.(Citation: DOJ GRU Indictment Jul 2018)(Citation: Ars Technica GRU indictment Jul 2018)(Citation: Crowdstrike DNC June 2016)(Citation: FireEye APT28)(Citation: SecureWorks TG-4127)(Citation: FireEye APT28 January 2017)(Citation: GRIZZLY STEPPE JAR)(Citation: Sofacy DealersChoice)(Citation: Palo Alto Sofacy 06-2018)(Citation: Sym\nAssociated software/tools: Wevtutil, certutil, CHOPSTICK, Net, Forfiles, DealersChoice, Mimikatz, ADVSTORESHELL, Cannon, Komplex"
+          },
+          {
+            "id": "intrusion-set--bef4c620-0787-42a8-a96d-b7eb6e85917c::T1090.002",
+            "score": 0.4498541726527578,
+            "distance": 1.222942590713501,
+            "technique_id": "T1090.002",
+            "technique_name": "External Proxy",
+            "text": "Group: APT28\nAliases: FROZENLAKE, STRONTIUM, Fancy Bear, Pawn Storm, GruesomeLarch, APT28, Tsar Team, Sofacy, SNAKEMACKEREL, IRON TWILIGHT, Swallowtail, Group 74, Threat Group-4127, TG-4127, Forest Blizzard, Sednit\nTechnique: T1090.002 External Proxy\nTactic: Command and Control\nEvidence: [APT28](https://attack.mitre.org/groups/G0007) used other victims as proxies to relay command traffic, for instance using a compromised Georgian military email server as a hop point to NATO victims. The group has also used a tool that acts as a proxy to allow C2 even if the victim is behind a router. [APT28](https://attack.mitre.org/groups/G0007) has also used a machine to relay and obscure communications between [CHOPSTICK](https://attack.mitre.org/software/S0023) and their server.(Citation: FireEye APT28)(Citation: Bitdefender APT28 Dec 2015)(Citation: DOJ GRU Indictment Jul 2018)\nGroup description: [APT28](https://attack.mitre.org/groups/G0007) is a threat group that has been attributed to Russia's General Staff Main Intelligence Directorate (GRU) 85th Main Special Service Center (GTsSS) military unit 26165.(Citation: NSA/FBI Drovorub August 2020)(Citation: Cybersecurity Advisory GRU Brute Force Campaign July 2021) This group has been active since at least 2004.(Citation: DOJ GRU Indictment Jul 2018)(Citation: Ars Technica GRU indictment Jul 2018)(Citation: Crowdstrike DNC June 2016)(Citation: FireEye APT28)(Citation: SecureWorks TG-4127)(Citation: FireEye APT28 January 2017)(Citation: GRIZZLY STEPPE JAR)(Citation: Sofacy DealersChoice)(Citation: Palo Alto Sofacy 06-2018)(Citation: Sym\nAssociated software/tools: Wevtutil, certutil, CHOPSTICK, Net, Forfiles, DealersChoice, Mimikatz, ADVSTORESHELL, Cannon, Komplex"
+          }
+        ]
+      },
+      {
+        "id": "intrusion-set--7f848c02-4d1e-4808-a4ae-4670681370a9",
+        "name": "BITTER",
+        "distance": 1.1518932580947876,
+        "score": 0.4947070649244776,
+        "metadata": {
+          "name": "BITTER",
+          "aliases": [
+            "BITTER",
+            "T-APT-17"
+          ],
+          "mitre_url": "https://attack.mitre.org/groups/G1002",
+          "technique_count": 17,
+          "c2_technique_count": 5,
+          "c2_techniques": [
+            "T1105",
+            "T1071.001",
+            "T1568",
+            "T1573",
+            "T1095"
+          ],
+          "matched_techniques": [
+            "T1095",
+            "T1071.001"
+          ],
+          "background": "[BITTER](https://attack.mitre.org/groups/G1002) is a suspected South Asian cyber espionage threat group that has been active since at least 2013. [BITTER](https://attack.mitre.org/groups/G1002) has targeted government, energy, and engineering organizations in Pakistan, China, Bangladesh, and Saudi Arabia.(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)",
+          "associated_software": "ZxxZ",
+          "matched_technique_details": [
+            {
+              "id": "T1095",
+              "name": "Non-Application Layer Protocol",
+              "evidence": "[BITTER](https://attack.mitre.org/groups/G1002) has used TCP for C2 communications.(Citation: Forcepoint BITTER Pakistan Oct 2016)",
+              "name_zh": "非应用层协议",
+              "evidence_zh": "[BITTER](https://attack.mitre.org/groups/G1002) 已使用 TCP 进行 C2 通信。（来源：Forcepoint BITTER Pakistan Oct 2016）",
+              "description_zh": "对手可能使用 OSI 非应用层协议在主机与 C2 服务器之间或网络中受感染的主机之间进行通信。可能的协议列表非常广泛。（引用：Wikipedia OSI）具体示例包括使用网络层协议，如互联网控制消息协议（ICMP），传输层协议，如用户数据报协议（UDP），会话层协议，如 Socket Secure (SOCKS)，以及重定向/隧道协议，如 LAN over Serial (SOL)。主机之间的 ICMP 通信就是一个例子。（引用：Cisco Synful Knock Evolution）由于 ICMP 是 Internet Protocol Suite 的一部分，所有 IP 兼容主机都必须实现它。（引用：Microsoft ICMP）然而，与其他 Internet 协议（如 TCP 或 UDP）相比，它的监控较少，对手可能利用它来隐藏通信。在 ESXi 环境中，对手可能会利用虚拟机通信接口 (VMCI) 进行来宾虚拟机和 ESXi 主机之间的通信。这种流量类似于传统网络套接字上的客户端-服务器通信，但仅限于运行 ESXi 主机的物理机器，这意味着它不会穿越外部网络（路由器、交换机）。这导致通信对外部监控以及 tcpdump、netstat、nmap 和 Wireshark 等标准网络工具不可见。通过在受损的 ESXi 主机中添加 VMCI 后门，对手可以持续地从任何来宾虚拟机重新访问受损 ESXi 主机的后门，无论存在何种网络分段或防火墙规则。（引用：Google Cloud Threat Intelligence VMWare ESXi Zero-Day 2023）"
+            },
+            {
+              "id": "T1071.001",
+              "name": "Web Protocols",
+              "evidence": "[BITTER](https://attack.mitre.org/groups/G1002) has used HTTP POST requests for C2.(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)",
+              "name_zh": "Web 协议",
+              "evidence_zh": "[BITTER](https://attack.mitre.org/groups/G1002) 曾使用 HTTP POST 请求进行命令与控制（C2）通信。（参考：Cisco Talos Bitter Bangladesh May 2022）（参考：Forcepoint BITTER Pakistan Oct 2016）",
+              "description_zh": "adversaries 可能使用与应用层协议 associated with web traffic 来避免检测/网络过滤，通过融入现有流量。对远程系统的命令以及这些命令的结果通常会被嵌入到客户端和服务器之间的协议流量中。携带 Web 流量的协议如 HTTP/S（引用：CrowdStrike Putter Panda）和 WebSocket（引用：Brazking-Websockets）在环境中可能非常常见。HTTP/S 包具有许多可以隐藏数据的字段和头部。敌手可能会滥用这些协议与受害者网络中受其控制的系统通信，同时模仿正常、预期的流量。"
+            }
+          ],
+          "background_zh": "[BITTER](https://attack.mitre.org/groups/G1002) 是一个涉嫌参与网络间谍活动的南亚威胁组织，自至少 2013 年起持续活跃。[BITTER](https://attack.mitre.org/groups/G1002) 针对巴基斯坦、中国、孟加拉国和沙特阿拉伯的政府、能源和工程机构发动攻击。(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)"
+        },
+        "text": "Group: BITTER\nAliases: BITTER, T-APT-17\nTechnique: T1095 Non-Application Layer Protocol\nTactic: Command and Control\nEvidence: [BITTER](https://attack.mitre.org/groups/G1002) has used TCP for C2 communications.(Citation: Forcepoint BITTER Pakistan Oct 2016)\nGroup description: [BITTER](https://attack.mitre.org/groups/G1002) is a suspected South Asian cyber espionage threat group that has been active since at least 2013. [BITTER](https://attack.mitre.org/groups/G1002) has targeted government, energy, and engineering organizations in Pakistan, China, Bangladesh, and Saudi Arabia.(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)\nAssociated software/tools: ZxxZ",
+        "evidence_chunks": [
+          {
+            "id": "intrusion-set--7f848c02-4d1e-4808-a4ae-4670681370a9::T1095",
+            "score": 0.46470706492447755,
+            "distance": 1.1518932580947876,
+            "technique_id": "T1095",
+            "technique_name": "Non-Application Layer Protocol",
+            "text": "Group: BITTER\nAliases: BITTER, T-APT-17\nTechnique: T1095 Non-Application Layer Protocol\nTactic: Command and Control\nEvidence: [BITTER](https://attack.mitre.org/groups/G1002) has used TCP for C2 communications.(Citation: Forcepoint BITTER Pakistan Oct 2016)\nGroup description: [BITTER](https://attack.mitre.org/groups/G1002) is a suspected South Asian cyber espionage threat group that has been active since at least 2013. [BITTER](https://attack.mitre.org/groups/G1002) has targeted government, energy, and engineering organizations in Pakistan, China, Bangladesh, and Saudi Arabia.(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)\nAssociated software/tools: ZxxZ"
+          },
+          {
+            "id": "intrusion-set--7f848c02-4d1e-4808-a4ae-4670681370a9::T1071.001",
+            "score": 0.44250878174894354,
+            "distance": 1.2598421573638916,
+            "technique_id": "T1071.001",
+            "technique_name": "Web Protocols",
+            "text": "Group: BITTER\nAliases: BITTER, T-APT-17\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [BITTER](https://attack.mitre.org/groups/G1002) has used HTTP POST requests for C2.(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)\nGroup description: [BITTER](https://attack.mitre.org/groups/G1002) is a suspected South Asian cyber espionage threat group that has been active since at least 2013. [BITTER](https://attack.mitre.org/groups/G1002) has targeted government, energy, and engineering organizations in Pakistan, China, Bangladesh, and Saudi Arabia.(Citation: Cisco Talos Bitter Bangladesh May 2022)(Citation: Forcepoint BITTER Pakistan Oct 2016)\nAssociated software/tools: ZxxZ"
+          }
+        ]
+      }
+    ],
+    "primary_candidate": {
+      "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb",
+      "name": "APT42",
+      "distance": 1.1256508827209473,
+      "score": 0.5304441393122592,
+      "metadata": {
+        "name": "APT42",
+        "aliases": [
+          "APT42"
+        ],
+        "mitre_url": "https://attack.mitre.org/groups/G1044",
+        "technique_count": 32,
+        "c2_technique_count": 4,
+        "c2_techniques": [
+          "T1132.001",
+          "T1102",
+          "T1071.001",
+          "T1573.002"
+        ],
+        "matched_techniques": [
+          "T1071.001",
+          "T1573.002",
+          "T1102",
+          "T1132.001"
+        ],
+        "background": "[APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou",
+        "associated_software": "NICECURL, TAMECAT",
+        "matched_technique_details": [
+          {
+            "id": "T1071.001",
+            "name": "Web Protocols",
+            "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling)",
+            "name_zh": "Web 协议",
+            "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 使用过 [NICECURL](https://attack.mitre.org/software/S1192) 等工具，并通过 HTTPS 进行命令与控制通信。(引用：Mandiant APT42-untangling)",
+            "description_zh": "adversaries 可能使用与应用层协议 associated with web traffic 来避免检测/网络过滤，通过融入现有流量。对远程系统的命令以及这些命令的结果通常会被嵌入到客户端和服务器之间的协议流量中。携带 Web 流量的协议如 HTTP/S（引用：CrowdStrike Putter Panda）和 WebSocket（引用：Brazking-Websockets）在环境中可能非常常见。HTTP/S 包具有许多可以隐藏数据的字段和头部。敌手可能会滥用这些协议与受害者网络中受其控制的系统通信，同时模仿正常、预期的流量。"
+          },
+          {
+            "id": "T1573.002",
+            "name": "Asymmetric Cryptography",
+            "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling)",
+            "name_zh": "非对称加密",
+            "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 使用过 [NICECURL](https://attack.mitre.org/software/S1192) 等工具，并通过 HTTPS 进行命令与控制通信。(引用：Mandiant APT42-untangling)",
+            "description_zh": "敌方可能采用已知的非对称加密算法来隐藏命令与控制流量，而不是依赖于通信协议提供的任何固有保护。非对称密码学，也称为公钥密码学，为每个参与方使用一对密钥：一个可以自由分发的公钥和一个私有的私钥。由于密钥的生成方式，发送方使用接收方的公钥对数据进行加密，而接收方使用其私钥对数据进行解密。这确保了只有预期的接收方才能读取加密数据。常见的公钥加密算法包括 RSA 和 ElGamal。出于效率考虑，许多协议（包括 SSL/TLS）在连接建立后使用对称密码学，但使用非对称密码学来建立或传输密钥。因此，这些协议被归类于 [非对称加密](https://attack.mitre.org/techniques/T1573/002)。"
+          },
+          {
+            "id": "T1102",
+            "name": "Web Service",
+            "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has used various links, such as links with typo-squatted domains, links to Dropbox files and links to fake Google sites, in spearphishing operations.(Citation: Mandiant APT42-untangling)(Citation: Mandiant APT42-charms)(Citation: TAG APT42)",
+            "name_zh": "Web 服务",
+            "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 在网络钓鱼行动中使用过多种链接，例如拼写冒用的域名链接、指向 Dropbox 文件的链接以及假冒的 Google 网站链接。（引用：Mandiant APT42-untangling）（引用：Mandiant APT42-charms）（引用：TAG APT42）",
+            "description_zh": "adversary 可能利用现有的合法外部 Web 服务作为中继数据到/从被入侵系统的手段。流行网站、云服务和社交媒体作为 C2 机制，由于在遭受入侵之前网络中的主机很可能已经与这些服务进行通信，因此可以为攻击者提供大量的掩护。使用常见服务，如 Google、Microsoft 或 Twitter 提供的服务，使得攻击者更容易隐藏在预期的噪声中。（来源：Broadcom BirdyClient Microsoft Graph API 2024）Web 服务提供商通常使用 SSL/TLS 加密，这为攻击者提供了额外的保护级别。使用 Web 服务还可以通过对恶意软件二进制分析防止后端 C2 基础设施被发现，同时实现运营弹性（因为该基础设施可能会动态更改）。"
+          },
+          {
+            "id": "T1132.001",
+            "name": "Standard Encoding",
+            "evidence": "[APT42](https://attack.mitre.org/groups/G1044) has encoded C2 traffic with Base64.(Citation: Mandiant APT42-untangling)",
+            "name_zh": "标准编码",
+            "evidence_zh": "[APT42](https://attack.mitre.org/groups/G1044) 使用 Base64 对 C2 流量进行了编码。（出处：Mandiant APT42-untangling）",
+            "description_zh": "敌方可能使用标准数据编码系统对数据进行编码，使指挥和控制（C2）流量中的内容更难以被检测。C2信息可以使用符合现有协议规范的标准数据编码系统进行编码。常见的数据编码方案包括ASCII、Unicode、十六进制、Base64和MIME。（引用：Wikipedia Binary-to-text Encoding）（引用：Wikipedia Character Encoding）某些数据编码系统还可能产生数据压缩，例如gzip。"
+          }
+        ],
+        "background_zh": "[APT42](https://attack.mitre.org/groups/G1044) 是一个由伊朗支持的威胁组织，从事网络间谍活动和监视。(Citation: Mandiant APT42-charms) 该组织主要关注中东地区的目标，但自2015年以来已针对各种行业和国家发动攻击。(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) 通过鱼叉式网络钓鱼邮件和/或PINEFLOWER Android恶意软件发起网络行动，然后监控并从受损系统和设备中收集信息。(Citation: Mandiant APT42-charms) 最后，[APT42](https://attack.mitre.org/groups/G1044) 使用原生功能和开源工具进行数据外泄。(Citation: Mandiant APT42-untangling) 其他商业厂商已将[APT42](https://attack.mitre.org/groups/G1044)的活动与[Magic Hound](https://attack.mitre.org/groups/G0059)联系起来。尽管[Magic Hound](https://attack.mitre.org/groups/G0059)和[APT42](https://attack.mitre.org/groups/G1044)之间存在行为与软件重叠，但它们似乎是不同的实体，并由其来源厂商作为不同实体进行追踪。"
+      },
+      "text": "Group: APT42\nAliases: APT42\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT",
+      "evidence_chunks": [
+        {
+          "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1071.001",
+          "score": 0.47044413931225915,
+          "distance": 1.1256508827209473,
+          "technique_id": "T1071.001",
+          "technique_name": "Web Protocols",
+          "text": "Group: APT42\nAliases: APT42\nTechnique: T1071.001 Web Protocols\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+        },
+        {
+          "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1573.002",
+          "score": 0.4496808826572348,
+          "distance": 1.223799228668213,
+          "technique_id": "T1573.002",
+          "technique_name": "Asymmetric Cryptography",
+          "text": "Group: APT42\nAliases: APT42\nTechnique: T1573.002 Asymmetric Cryptography\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used tools such as [NICECURL](https://attack.mitre.org/software/S1192) with command and control communication taking place over HTTPS.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+        },
+        {
+          "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1102",
+          "score": 0.4458805704986654,
+          "distance": 1.242753028869629,
+          "technique_id": "T1102",
+          "technique_name": "Web Service",
+          "text": "Group: APT42\nAliases: APT42\nTechnique: T1102 Web Service\nTactic: Command and Control\nEvidence: [APT42](https://attack.mitre.org/groups/G1044) has used various links, such as links with typo-squatted domains, links to Dropbox files and links to fake Google sites, in spearphishing operations.(Citation: Mandiant APT42-untangling)(Citation: Mandiant APT42-charms)(Citation: TAG APT42) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+        },
+        {
+          "id": "intrusion-set--c0291346-defe-48d7-9542-9e074ba1bdfb::T1132.001",
+          "score": 0.4434707028950543,
+          "distance": 1.254940390586853,
+          "technique_id": "T1132.001",
+          "technique_name": "Standard Encoding",
+          "text": "Group: APT42\nAliases: APT42\nTechnique: T1132.001 Standard Encoding\nTactic: Command and Control\nEvidence:  [APT42](https://attack.mitre.org/groups/G1044) has encoded C2 traffic with Base64.(Citation: Mandiant APT42-untangling) \nGroup description: [APT42](https://attack.mitre.org/groups/G1044) is an Iranian-sponsored threat group that conducts cyber espionage and surveillance.(Citation: Mandiant APT42-charms) The group primarily focuses on targets in the Middle East region, but has targeted a variety of industries and countries since at least 2015.(Citation: Mandiant APT42-charms) [APT42](https://attack.mitre.org/groups/G1044) starts cyber operations through spearphishing emails and/or the PINEFLOWER Android malware, then monitors and collects information from the compromised systems and devices.(Citation: Mandiant APT42-charms) Finally, [APT42](https://attack.mitre.org/groups/G1044) exfiltrates data using native features and open-sou\nAssociated software/tools: NICECURL, TAMECAT"
+        }
+      ]
+    },
+    "confidence": 54.66277968822946,
+    "matched_techniques": [
+      "T1132.001",
+      "T1102",
+      "T1071.001",
+      "T1573.002"
+    ]
+  },
+  "attribution_status": "completed",
+  "report_decision": {
+    "classification": "malicious_c2",
+    "verdict": "恶意 C2 通信",
+    "risk_level": "高危",
+    "confidence": "高"
+  },
+  "lstm": {
+    "status": "completed",
+    "beacons": [
+      {
+        "src": "192.168.56.5",
+        "dst": "192.168.56.4",
+        "port": "80",
+        "proto": "tcp",
+        "confidence": 100.0,
+        "risk": "Critical",
+        "event_count": 10,
+        "flow_gap": 0.017,
+        "gap_cv": 1.078
+      }
+    ],
+    "total_connections": 1,
+    "total_flagged": 1,
+    "threshold": 0.99,
+    "total_windows": 6,
+    "inference_batch_size": 512,
+    "summary_text": "The all-TCP LSTM beacon detection model analyzed 1 connection groups and flagged **1** as potential C2 beacons."
+  },
+  "rita": {
+    "available": true,
+    "database": "run_229ea3f3d3fe465c876887f0d7e46731",
+    "detailed_evidence_available": true
+  }
+}

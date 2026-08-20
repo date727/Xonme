@@ -81,7 +81,18 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = APP_ROOT / "data"
 USER_RUNS_DIR = DATA_DIR / "analysis_runs" / "users"
 GUEST_JOBS_DIR = DATA_DIR / "guest_jobs"
+SAMPLE_RESULT_DIR = APP_ROOT / "app" / "sample_results"
 ARTIFACT_SCHEMA_VERSION = 1
+
+# These two bundled PCAPNG files have stable, previously generated outputs.
+# Replaying those outputs avoids repeatedly running the heavyweight Zeek/RITA/
+# LSTM/RAG pipeline during a presentation, while retaining the normal stream
+# of task stages.  Any other upload always uses the full analysis pipeline.
+PRECOMPUTED_SAMPLE_RESULTS = {
+    "28a119538ecb509cee1deb9e4a465946537c3b23913873aaf570952dd43165d1": "cs4_amazon_http",
+    "efc052a8172d7d76a34be5c98843278f3885b0e04494248093df753a89d5cf93": "benign5_smashburger",
+}
+PRECOMPUTED_SAMPLE_DURATION_SECONDS = 40
 
 app = FastAPI()
 app.include_router(auth_router)
@@ -1032,6 +1043,98 @@ def _file_sha256(file_path: Path) -> str:
     return digest.hexdigest()
 
 
+def _load_precomputed_sample_result(sample_sha256: str) -> tuple[dict, str] | None:
+    """Load the saved dashboard and report for one exact bundled sample."""
+
+    sample_key = PRECOMPUTED_SAMPLE_RESULTS.get(sample_sha256.lower())
+    if not sample_key:
+        return None
+    try:
+        dashboard = json.loads(
+            (SAMPLE_RESULT_DIR / f"{sample_key}.dashboard.json").read_text(encoding="utf-8")
+        )
+        report = (SAMPLE_RESULT_DIR / f"{sample_key}.analysis.md").read_text(encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"Precomputed sample result unavailable: {exc}")
+        return None
+    return dashboard, report
+
+
+def _wait_for_precomputed_sample_stage(job: AnalysisJob, deadline: float) -> None:
+    """Wait in short intervals so a presentation sample remains cancellable."""
+
+    while True:
+        _raise_if_cancelled(job)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        time.sleep(min(0.25, remaining))
+
+
+def _stream_precomputed_sample_result(
+    *,
+    dashboard: dict,
+    report: str,
+    artifacts: AnalysisArtifacts,
+    record_id: int | None,
+    original_filename: str,
+    user: User | None,
+    rita_db_name: str,
+    model_config: ModelConfig,
+    sample_sha256: str,
+    file_size: int,
+    job: AnalysisJob,
+):
+    """Emit normal analysis progress over a fixed duration, then save cached output."""
+
+    started_at = time.monotonic()
+    for index, step in enumerate(("zeek", "rita", "lstm", "rag", "ai")):
+        yield sse_event("step", step)
+        _wait_for_precomputed_sample_stage(
+            job, started_at + (index + 1) * PRECOMPUTED_SAMPLE_DURATION_SECONDS / 5
+        )
+
+    _raise_if_cancelled(job)
+    dashboard = dict(dashboard)
+    dashboard["analysis_uuid"] = artifacts.analysis_uuid
+    dashboard["display_name"] = artifacts.display_name
+    _write_json(artifacts.visualization_dir / "dashboard.json", dashboard)
+    report_path = artifacts.report_dir / "analysis.md"
+    report_path.write_text(report, encoding="utf-8")
+    _write_manifest(
+        artifacts,
+        status="completed",
+        original_filename=original_filename,
+        user=user,
+        rita_db_name=rita_db_name,
+        model_config=model_config,
+        sha256=sample_sha256,
+        file_size=file_size,
+    )
+    _append_runtime_log(artifacts, "Precomputed sample result completed")
+    if record_id:
+        finish_analysis_record(
+            record_id,
+            status="completed",
+            result_json=dashboard,
+            report_markdown=report,
+            report_path=str(report_path),
+        )
+    yield sse_event(
+        "result",
+        json.dumps(
+            {
+                "name": artifacts.analysis_uuid,
+                "display_name": artifacts.display_name,
+                "analysis_markdown": report,
+                "visualization": dashboard,
+                "analysis_record_id": record_id,
+            },
+            ensure_ascii=False,
+        ),
+    )
+
+
 def _cleanup_guest_artifacts(artifacts: AnalysisArtifacts | None) -> None:
     """Remove transient files after an anonymous analysis has been streamed."""
 
@@ -1468,6 +1571,25 @@ async def analyze_pcap_stream(
                     "analysis_created",
                     json.dumps({"analysis_record_id": record_id}),
                 )
+
+            precomputed_result = _load_precomputed_sample_result(sha256)
+            if precomputed_result:
+                dashboard, report = precomputed_result
+                _append_runtime_log(artifacts, "Using saved result for recognized bundled sample")
+                yield from _stream_precomputed_sample_result(
+                    dashboard=dashboard,
+                    report=report,
+                    artifacts=artifacts,
+                    record_id=record_id,
+                    original_filename=pcap.filename or "upload.pcap",
+                    user=user,
+                    rita_db_name=rita_db_name,
+                    model_config=model_config,
+                    sample_sha256=sha256,
+                    file_size=file_size,
+                    job=job,
+                )
+                return
 
             yield sse_event("step", "zeek")
             run_zeek(str(upload_path), output_dir, job=job)

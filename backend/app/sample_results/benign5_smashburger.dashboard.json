@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "analysis_uuid": "da508dee0efe4be4bafe539d066d2737",
+  "display_name": "20260820-154610_benign5_smashburger_da508dee",
+  "connection_count": 5,
+  "engine_status": {
+    "rita_available": true,
+    "lstm_completed": false,
+    "rag_completed": false
+  },
+  "threats": [],
+  "engine_results": {
+    "rita": [
+      {
+        "src_ip": "192.168.46.84",
+        "dst_ip": "::",
+        "dst_host": "smashburger.com",
+        "dst_port": "443",
+        "protocol": "tcp",
+        "beacon_score": 0.353,
+        "connection_count": 5.0,
+        "total_duration": 249.902513,
+        "total_bytes": 44806.0,
+        "display_state": "below_alert_threshold",
+        "rita": {
+          "protocol": "tcp",
+          "beacon_score": 0.353,
+          "destination_host": "smashburger.com",
+          "timestamp_score": 0.701,
+          "datasize_score": 0.712,
+          "duration_score": 0.0,
+          "histogram_score": 0.0,
+          "ts_intervals": [
+            25.0,
+            43.0,
+            63.0,
+            105.0
+          ],
+          "ts_interval_counts": [
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "connection_count": 5.0,
+          "total_duration": 249.902513,
+          "total_bytes": 44806.0,
+          "long_connection": 0.0,
+          "c2_over_dns": 0.0,
+          "subdomain_count": 0.0,
+          "threat_intelligence": 0,
+          "evidence_source": "rita_mixtape",
+          "ds_sizes": [
+            1918.0,
+            1930.0,
+            1958.0,
+            2077.0
+          ],
+          "ds_size_counts": [
+            1.0,
+            1.0,
+            1.0,
+            2.0
+          ],
+          "available_fields": [
+            "beacon_score",
+            "c2_over_dns_score",
+            "count",
+            "ds_score",
+            "ds_size_counts",
+            "ds_sizes",
+            "dst",
+            "dur_score",
+            "fqdn",
+            "hist_score",
+            "long_conn_score",
+            "port_proto_service",
+            "src",
+            "subdomain_count",
+            "threat_intel_score",
+            "total_bytes",
+            "total_duration",
+            "ts_interval_counts",
+            "ts_intervals",
+            "ts_score"
+          ],
+          "connection_sequence": {
+            "indexes": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "interval_seconds": [
+              0.0,
+              104.45867109298706,
+              42.71223711967468,
+              63.70563983917236,
+              24.20332908630371
+            ],
+            "frequency_per_minute": [
+              0.0,
+              0.5743898459763974,
+              1.404749646615021,
+              0.941831840186718,
+              2.4789978182775307
+            ],
+            "total_bytes": [
+              7494,
+              7414,
+              7495,
+              7415,
+              7416
+            ]
+          }
+        }
+      }
+    ],
+    "lstm": {
+      "status": "insufficient_sequence",
+      "reason": "No communication group reached the model sequence length",
+      "minimum_sequence_length": 10,
+      "max_group_connections": 3,
+      "beacons": []
+    }
+  },
+  "attribution": null,
+  "attribution_status": "no_threat",
+  "report_decision": {
+    "classification": "benign_web",
+    "verdict": "未发现 C2 证据的低风险通信",
+    "risk_level": "低危",
+    "confidence": "高"
+  },
+  "lstm": {
+    "status": "insufficient_sequence",
+    "reason": "No communication group reached the model sequence length",
+    "minimum_sequence_length": 10,
+    "max_group_connections": 3,
+    "beacons": []
+  },
+  "rita": {
+    "available": true,
+    "database": "run_da508dee0efe4be4bafe539d066d2737",
+    "detailed_evidence_available": false
+  }
+}
