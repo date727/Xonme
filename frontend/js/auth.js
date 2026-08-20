@@ -6,6 +6,12 @@ const toastCloseButton = document.querySelector("#auth-toast-close");
 const submitButton = form?.querySelector("button[type=submit]");
 const fillDemoAccountButton = document.querySelector("#fill-demo-account");
 const passwordToggles = document.querySelectorAll("[data-password-toggle]");
+const guestModeLink = document.querySelector(".header-actions .outline");
+
+guestModeLink?.addEventListener("click", (event) => {
+  event.preventDefault();
+  window.location.href = "index.html?mode=guest";
+});
 
 const setMessage = (text = "", type = "") => {
   if (!toast || !toastMessage) return;
@@ -65,7 +71,9 @@ form?.addEventListener("submit", async (event) => {
     });
     if (!response.ok) throw new Error(await readError(response));
     setMessage(endpoint === "/auth/login" ? "登录成功，正在进入系统…" : "注册成功，正在进入系统…", "success");
-    window.setTimeout(() => { window.location.href = "index.html#home"; }, 450);
+    const next = new URLSearchParams(window.location.search).get("next");
+    const destination = next === "profile" ? "#profile" : "#home";
+    window.setTimeout(() => { window.location.href = `index.html${destination}`; }, 450);
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "请求失败，请稍后重试", "error");
   } finally {

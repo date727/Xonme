@@ -1370,7 +1370,7 @@ async def analyze_pcap(pcap: UploadFile = File(...)) -> AnalyzeResponse:
         print(f"Detection merge: failed - {exc}")
         merged_features = []
     try:
-        rag_context, rag_results = _run_optional_attribution(merged_features)
+        rag_context, _ = _run_optional_attribution(merged_features)
     except Exception as exc:
         print(f"RAG: failed - {exc}")
 

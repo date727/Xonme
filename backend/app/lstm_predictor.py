@@ -260,12 +260,27 @@ def predict_beacons(
         raise ValueError("inference batch size must be greater than zero")
     extracted = _extract_rows(csv_text)
     if extracted is None:
-        return None
+        return {
+            "status": "unavailable",
+            "reason": "Model artifacts are unavailable or the feature input is invalid",
+            "beacons": [],
+        }
     rows, feature_cols, seq_len, group_cols, sort_col = extracted
     prepared_groups = _prepare_groups(rows, seq_len, group_cols, sort_col)
     if not prepared_groups:
+        group_sizes: dict[tuple, int] = defaultdict(int)
+        for row in rows:
+            key = tuple(row.get(column, "") for column in group_cols)
+            group_sizes[key] += 1
+        max_group_connections = max(group_sizes.values(), default=0)
         logger.info("No groups had enough rows to build LSTM sequences; skipping detection")
-        return None
+        return {
+            "status": "insufficient_sequence",
+            "reason": "No communication group reached the model sequence length",
+            "minimum_sequence_length": seq_len,
+            "max_group_connections": max_group_connections,
+            "beacons": [],
+        }
     raw_threshold = _default_threshold() if threshold is None else threshold
     try:
         threshold = float(raw_threshold)
@@ -294,7 +309,11 @@ def predict_beacons(
                     best_by_group[info["group_key"]] = (probability, info)
     except Exception as exc:
         logger.warning("LSTM batched prediction failed: %s", exc)
-        return None
+        return {
+            "status": "failed",
+            "reason": "LSTM inference failed",
+            "beacons": [],
+        }
 
     beacons = []
     for probability, info in best_by_group.values():
@@ -328,6 +347,7 @@ def predict_beacons(
     )
 
     return {
+        "status": "completed",
         "beacons": beacons,
         "total_connections": unique_connections,
         "total_flagged": total_flagged,
