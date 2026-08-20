@@ -31,7 +31,7 @@ const apiBase = `${window.location.protocol}//${window.location.hostname}:8765`;
 // Chinese text as part of a URL. Add a whitespace boundary after a plain URL
 // before parsing; explicit Markdown links remain intact.
 const separateBareUrlFromChineseText = (text) => text.replace(
-  /((?:https?:\/\/|www\.)[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+=%\-]*)(?=[，。；：！？、】【、\u4e00-\u9fff])/g,
+  /((?:https?:\/\/|www\.)[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+=%\-]*)(?=[，。；：！？、】【、（）\u4e00-\u9fff])/g,
   "$1 ",
 );
 
