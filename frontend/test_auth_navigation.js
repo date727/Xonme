@@ -32,6 +32,8 @@ assert.match(
   /\["collector", "profile"\]\.includes\(requestedDestination\) \? `#\$\{requestedDestination\}` : ""/,
   "successful authentication must return to a protected destination or open home without a fragment jump",
 );
+assert.match(app, /if \(tabName === "home" && !query\)/, "the default home route must remain fragment-free");
+assert.match(app, /scroll: false/, "initial routing must not start a second smooth scroll");
 assert.match(auth, /target\.searchParams\.set\("next", requestedDestination\)/, "switching between login and registration must preserve the destination");
 assert.match(app, /openAuthModal\("login", tabName\)/, "protected navigation must preserve its destination");
 assert.match(app, /login\.html\$\{next\}/, "initial authentication redirect must preserve its destination");

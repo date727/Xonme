@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C2Sherlock 可视化分析平台</title>
   <script>
+    document.documentElement.classList.add("auth-pending");
     // `#home` points to the section below the sticky header. If the browser
     // handles that fragment on initial load, the page briefly opens part-way
     // down before the application resets it. Home is already the default
@@ -15,7 +16,7 @@
     if ("scrollRestoration" in window.history) {
       window.history.scrollRestoration = "manual";
     }
-    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
   </script>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/visualization.css?v=20260819-1" />
@@ -24,7 +25,6 @@
     /* Keep protected content hidden until the session check has completed. */
     html.auth-pending body { visibility: hidden; }
   </style>
-  <script>document.documentElement.classList.add("auth-pending");</script>
 </head>
 <body>
   <header class="topbar">

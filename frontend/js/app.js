@@ -17,7 +17,11 @@ const scrollPageToTop = () => {
   document.body.scrollTop = 0;
 };
 
-window.addEventListener("pageshow", scrollPageToTop);
+// A fresh login navigation is already positioned before the stylesheet loads.
+// Only a back/forward-cache restore needs an additional reset here.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) scrollPageToTop();
+});
 
 // The frontend can run on any host (for example :5500); the backend is always
 // reached through that same host on its fixed service port.
@@ -661,8 +665,13 @@ const getCurrentCaseId = () => {
   return getHashState().params.get("case");
 };
 
-const buildTabHash = (tabName, params = new URLSearchParams()) => {
+const buildTabRoute = (tabName, params = new URLSearchParams()) => {
   const query = params.toString();
+  // Home is the default document route. Keeping it fragment-free prevents the
+  // browser from aligning the #home section underneath the sticky header.
+  if (tabName === "home" && !query) {
+    return `${window.location.pathname}${window.location.search}`;
+  }
   return `#${tabName}${query ? `?${query}` : ""}`;
 };
 
@@ -700,12 +709,12 @@ const switchTab = (tabName, options = {}) => {
   if (history.replaceState) {
     const params = options.params || new URLSearchParams();
     const method = options.push ? "pushState" : "replaceState";
-    history[method](null, "", buildTabHash(tabName, params));
+    history[method](null, "", buildTabRoute(tabName, params));
   }
-  scrollPageToTop();
-  // Run once more after the newly active page has been laid out. This also
-  // overrides the browser's initial #home fragment positioning after login.
-  window.requestAnimationFrame(scrollPageToTop);
+  if (options.scroll !== false) {
+    scrollPageToTop();
+    window.requestAnimationFrame(scrollPageToTop);
+  }
   renderCaseRecommendation();
   if (tabName === "capability") {
     const routeAnalysisId = Number(options.params?.get("analysis"));
@@ -739,7 +748,9 @@ const setupTabs = () => {
   });
   const hashState = getHashState();
   const initial = window.location.pathname.replace(/\/+$/, "").endsWith("/analyze") ? "tool" : hashState.tab;
-  switchTab($(`[data-page="${initial}"]`) ? initial : "home", { params: hashState.params });
+  // The initial document position was set synchronously in <head>. Avoid a
+  // second scripted scroll after smooth-scrolling CSS has loaded.
+  switchTab($(`[data-page="${initial}"]`) ? initial : "home", { params: hashState.params, scroll: false });
   window.addEventListener("popstate", () => {
     const state = getHashState();
     switchTab($(`[data-page="${state.tab}"]`) ? state.tab : "home", { params: state.params });
@@ -1553,9 +1564,6 @@ const loadSession = async () => {
     window.location.replace(`login.html${next}`);
     return;
   }
-  // Keep the page hidden until its final route is at scroll position zero.
-  // This prevents a restored/fragment position from flashing before home.
-  scrollPageToTop();
   document.documentElement.classList.remove("auth-pending");
   renderAccount();
   if (currentUser) {
