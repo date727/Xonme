@@ -7,6 +7,14 @@ const submitButton = form?.querySelector("button[type=submit]");
 const fillDemoAccountButton = document.querySelector("#fill-demo-account");
 const passwordToggles = document.querySelectorAll("[data-password-toggle]");
 const guestModeLink = document.querySelector(".header-actions .outline");
+const authPageSwitchLink = document.querySelector(".switch-link a");
+
+const requestedDestination = new URLSearchParams(window.location.search).get("next");
+if (authPageSwitchLink && ["collector", "profile"].includes(requestedDestination)) {
+  const target = new URL(authPageSwitchLink.href, window.location.href);
+  target.searchParams.set("next", requestedDestination);
+  authPageSwitchLink.href = `${target.pathname.split("/").pop()}${target.search}`;
+}
 
 guestModeLink?.addEventListener("click", (event) => {
   event.preventDefault();
@@ -71,8 +79,7 @@ form?.addEventListener("submit", async (event) => {
     });
     if (!response.ok) throw new Error(await readError(response));
     setMessage(endpoint === "/auth/login" ? "登录成功，正在进入系统…" : "注册成功，正在进入系统…", "success");
-    const next = new URLSearchParams(window.location.search).get("next");
-    const destination = next === "profile" ? "#profile" : "#home";
+    const destination = ["collector", "profile"].includes(requestedDestination) ? `#${requestedDestination}` : "#home";
     window.setTimeout(() => { window.location.href = `index.html${destination}`; }, 450);
   } catch (error) {
     setMessage(error instanceof Error ? error.message : "请求失败，请稍后重试", "error");

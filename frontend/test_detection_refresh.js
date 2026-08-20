@@ -12,6 +12,9 @@ const lifecycle = fs.readFileSync(path.join(root, "backend", "app", "stream_life
 assert.match(frontend, /activeAnalysisRecordId: "c2s\.activeAnalysisRecordId"/);
 assert.match(frontend, /persistActiveAnalysis\(activeAnalysisRecordId\)/);
 assert.match(frontend, /const resumeDetachedAnalysis = async \(\) =>/);
+assert.match(frontend, /if \(currentUser\) \{\s*void loadAnalysisHistory\(\);\s*void resumeDetachedAnalysis\(\);/);
+assert.match(frontend, /if \(eventName === "result"\) \{\s*const payload = JSON\.parse\(data\);\s*applyCompletedStreamResult\(payload\);/);
+assert.match(frontend, /const applyCompletedStreamResult = \(payload\) => \{[\s\S]*?streamResultReceived = true;/);
 assert.match(frontend, /\/analyses\/\$\{recordId\}\/status/);
 assert.match(frontend, /\/analyses\/\$\{activeAnalysisRecordId\}\/cancel/);
 assert.match(frontend, /find\(\(item\) => item\.status === "processing"\)/);

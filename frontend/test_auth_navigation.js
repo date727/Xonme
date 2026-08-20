@@ -29,9 +29,12 @@ assert.match(
 );
 assert.match(
   auth,
-  /window\.location\.href = "index\.html#home"/,
-  "successful login or registration must enter the home page",
+  /\["collector", "profile"\]\.includes\(requestedDestination\) \? `#\$\{requestedDestination\}` : "#home"/,
+  "successful authentication must return to a protected destination or default to home",
 );
+assert.match(auth, /target\.searchParams\.set\("next", requestedDestination\)/, "switching between login and registration must preserve the destination");
+assert.match(app, /openAuthModal\("login", tabName\)/, "protected navigation must preserve its destination");
+assert.match(app, /login\.html\$\{next\}/, "initial authentication redirect must preserve its destination");
 assert.doesNotMatch(auth, /index\.html#tool|destination.*#tool/, "authentication must not default to detection center");
 
 console.log("authentication navigation: OK");

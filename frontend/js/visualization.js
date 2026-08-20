@@ -82,19 +82,21 @@
     // must contribute to the overview KPI without becoming a suspicious row.
     const ritaResults = [...list.filter((item) => (item.detection_sources || []).includes("RITA")), ...rawRita];
     const maxBeacon = Math.max(0, ...ritaResults.map((item) => num(item.beacon_score)));
-    const maxLstm = Math.max(0, ...list.map((item) => num(item.lstm_confidence)));
-    const hasLstmValue = list.some((item) => Number.isFinite(Number(item.lstm_confidence)));
+    const lstmResults = list.filter((item) =>
+      (item.detection_sources || []).includes("LSTM") && item.lstm_confidence != null
+    );
+    const maxLstm = Math.max(0, ...lstmResults.map((item) => num(item.lstm_confidence)));
     const attributionConfidence = attribution.confidence == null ? null : num(attribution.confidence);
     const lstmStatus = dashboard?.lstm?.status;
     const attributionStatus = dashboard?.attribution_status;
     const lstmStatusNote = {
       insufficient_sequence: "时序样本不足",
-      completed: "未发现 Beacon 异常",
+      completed: "未检出时序异常风险",
       unavailable: "模型不可用",
       failed: "检测失败，请查看任务日志",
     }[lstmStatus] || "未参与本次评估";
     const attributionStatusNote = {
-      no_threat: "当前无待归因威胁",
+      no_threat: "未发现需溯源的威胁",
       no_candidate: "未检索到归因候选",
       unavailable: "归因服务不可用",
       failed: "归因失败，请查看任务日志",
@@ -120,8 +122,8 @@
     setMetricValue("viz-lstm-max", lstmResults.length ? `${maxLstm.toFixed(1)}%` : null);
     setMetricValue("viz-rag-confidence", attributionConfidence == null ? null : `${attributionConfidence.toFixed(1)}%`);
     setValue("viz-threat-note", list.length ? `${list.length} 条需重点关注` : "未发现重点可疑连接");
-    setValue("viz-beacon-note", ritaResults.length ? (list.length ? (maxBeacon >= 80 ? "强周期特征" : maxBeacon >= 50 ? "中等周期特征" : "低周期特征") : "原始 RITA 结果，未达告警阈值") : "暂无 RITA 结果");
-    setValue("viz-lstm-note", hasLstmValue ? (maxLstm >= 80 ? "高置信异常" : maxLstm >= 50 ? "中等置信异常" : "低置信异常") : lstmStatusNote);
+    setValue("viz-beacon-note", ritaResults.length ? (list.length ? (maxBeacon >= 80 ? "强周期特征" : maxBeacon >= 50 ? "中等周期特征" : "低周期特征") : "原始 RITA 结果，未达告警阈值") : "未检出周期性通信风险");
+    setValue("viz-lstm-note", lstmResults.length ? (maxLstm >= 80 ? "高置信异常" : maxLstm >= 50 ? "中等置信异常" : "低置信异常") : lstmStatusNote);
     setValue("viz-rag-note", attributionConfidence == null ? attributionStatusNote : (attributionConfidence >= 70 ? "较高归因可信度" : attributionConfidence >= 40 ? "中等归因可信度" : "低归因可信度"));
 
     const dualEngineCount = list.filter((item) => ["RITA", "LSTM"].every((engine) => (item.detection_sources || []).includes(engine))).length;

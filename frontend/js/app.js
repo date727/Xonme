@@ -688,7 +688,7 @@ const loadAnalysisFromRoute = async (params) => {
 const switchTab = (tabName, options = {}) => {
   if (authRequiredTabs.has(tabName) && !currentUser) {
     if (!sessionResolved) return;
-    openAuthModal("login");
+    openAuthModal("login", tabName);
     return;
   }
   $$(".nav-btn").forEach((button) => {
@@ -835,24 +835,18 @@ const applyCompletedStreamResult = (payload) => {
   stopDetachedAnalysisPolling();
   clearPersistedAnalysis();
   stopAnalysisCompletionPolling();
-  latestReportMarkdown = markdown;
-  latestVisualization = payload.visualization || null;
-  resultEl.innerHTML = renderMarkdown(markdown);
-  setReportDownloadEnabled(true);
-  setCurrentDataAvailable(Boolean(latestVisualization));
+  currentTaskReportMarkdown = markdown;
+  currentTaskVisualization = payload.visualization || null;
+  currentTaskAnalysis = {
+    original_filename: selectedFile?.name || payload.display_name,
+    file_size: selectedFile?.size ?? payload.file_size,
+    status: "completed",
+    completed_at: payload.completed_at || new Date().toISOString(),
+    report_markdown: markdown,
+  };
+  setCurrentDataAvailable(Boolean(currentTaskVisualization));
   markAllDone();
   setStatus("分析完成。");
-  try {
-    window.C2SherlockVisualization?.render(latestVisualization, {
-      original_filename: selectedFile?.name || payload.display_name,
-      file_size: selectedFile?.size,
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      report_markdown: markdown,
-    });
-  } catch (error) {
-    console.error("分析已完成，但数据中心渲染失败", error);
-  }
 };
 
 const recoverCompletedStreamResult = async (recordId) => {
@@ -863,6 +857,8 @@ const recoverCompletedStreamResult = async (recordId) => {
   const payload = await response.json();
   applyCompletedStreamResult({
     display_name: payload.analysis?.original_filename,
+    file_size: payload.analysis?.file_size,
+    completed_at: payload.analysis?.completed_at,
     analysis_markdown: payload.analysis?.report_markdown,
     visualization: payload.dashboard,
   });
@@ -979,21 +975,7 @@ const handleStreamEvent = (eventName, data) => {
 
   if (eventName === "result") {
     const payload = JSON.parse(data);
-    const markdown = normalizeMarkdown(payload.analysis_markdown || "后端未返回分析报告。");
-    currentTaskReportMarkdown = markdown;
-    currentTaskVisualization = payload.visualization || null;
-    currentTaskAnalysis = {
-      original_filename: selectedFile?.name || payload.display_name,
-      file_size: selectedFile?.size,
-      status: "completed",
-      completed_at: new Date().toISOString(),
-      report_markdown: markdown,
-    };
-    // Completion enables the detection-center detail button only. It must not
-    // overwrite the historical task currently displayed in the data center.
-    setCurrentDataAvailable(Boolean(currentTaskVisualization));
-    markAllDone();
-    setStatus("分析完成。");
+    applyCompletedStreamResult(payload);
     return;
   }
 
@@ -1509,8 +1491,9 @@ const setAuthMode = (mode) => {
   setFormMessage($("#register-message"));
 };
 
-const openAuthModal = (mode = "login") => {
-  window.location.href = mode === "register" ? "register.html" : "login.html";
+const openAuthModal = (mode = "login", nextTab = null) => {
+  const next = authRequiredTabs.has(nextTab) ? `?next=${encodeURIComponent(nextTab)}` : "";
+  window.location.href = `${mode === "register" ? "register.html" : "login.html"}${next}`;
 };
 
 const closeAuthModal = () => {
@@ -1564,14 +1547,18 @@ const loadSession = async () => {
     currentUser = null;
   }
   sessionResolved = true;
+  const routeState = getHashState();
   if (!currentUser && !isGuestMode) {
-    window.location.replace("login.html");
+    const next = authRequiredTabs.has(routeState.tab) ? `?next=${encodeURIComponent(routeState.tab)}` : "";
+    window.location.replace(`login.html${next}`);
     return;
   }
   document.documentElement.classList.remove("auth-pending");
   renderAccount();
-  void loadAnalysisHistory();
-  const routeState = getHashState();
+  if (currentUser) {
+    void loadAnalysisHistory();
+    void resumeDetachedAnalysis();
+  }
   if (currentUser && routeState.tab === "capability") {
     void loadAnalysisFromRoute(routeState.params);
   }
