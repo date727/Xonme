@@ -1553,6 +1553,9 @@ const loadSession = async () => {
     window.location.replace(`login.html${next}`);
     return;
   }
+  // Keep the page hidden until its final route is at scroll position zero.
+  // This prevents a restored/fragment position from flashing before home.
+  scrollPageToTop();
   document.documentElement.classList.remove("auth-pending");
   renderAccount();
   if (currentUser) {

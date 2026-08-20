@@ -4,6 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C2Sherlock 可视化分析平台</title>
+  <script>
+    // `#home` points to the section below the sticky header. If the browser
+    // handles that fragment on initial load, the page briefly opens part-way
+    // down before the application resets it. Home is already the default
+    // route, so remove only that redundant initial fragment before first paint.
+    if (window.location.hash === "#home") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+    window.scrollTo(0, 0);
+  </script>
   <link rel="stylesheet" href="styles/base.css" />
   <link rel="stylesheet" href="styles/visualization.css?v=20260819-1" />
   <link rel="stylesheet" href="styles/collector.css?v=20260819-3" />
@@ -769,7 +782,7 @@
   <script src="https://cdn.jsdelivr.net/npm/marked@11.2.0/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
   <script src="js/visualization.js?v=20260819-3"></script>
-  <script src="js/app.js?v=20260820-1"></script>
+  <script src="js/app.js?v=20260820-2"></script>
   <script src="js/collector.js?v=20260819-4"></script>
 </body>
 </html>

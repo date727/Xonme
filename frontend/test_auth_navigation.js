@@ -29,8 +29,8 @@ assert.match(
 );
 assert.match(
   auth,
-  /\["collector", "profile"\]\.includes\(requestedDestination\) \? `#\$\{requestedDestination\}` : "#home"/,
-  "successful authentication must return to a protected destination or default to home",
+  /\["collector", "profile"\]\.includes\(requestedDestination\) \? `#\$\{requestedDestination\}` : ""/,
+  "successful authentication must return to a protected destination or open home without a fragment jump",
 );
 assert.match(auth, /target\.searchParams\.set\("next", requestedDestination\)/, "switching between login and registration must preserve the destination");
 assert.match(app, /openAuthModal\("login", tabName\)/, "protected navigation must preserve its destination");
