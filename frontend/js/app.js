@@ -6,6 +6,19 @@ const STORAGE_KEYS = {
 let currentUser = null;
 let sessionResolved = false;
 
+// This is a single-page interface: each primary page should open from its top
+// instead of inheriting the browser's previous scroll position.
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+
+const scrollPageToTop = () => {
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+};
+
+window.addEventListener("pageshow", scrollPageToTop);
+
 // The frontend can run on any host (for example :5500); the backend is always
 // reached through that same host on its fixed service port.
 const apiBase = `${window.location.protocol}//${window.location.hostname}:8765`;
@@ -671,6 +684,10 @@ const switchTab = (tabName, options = {}) => {
     const method = options.push ? "pushState" : "replaceState";
     history[method](null, "", buildTabHash(tabName, params));
   }
+  scrollPageToTop();
+  // Run once more after the newly active page has been laid out. This also
+  // overrides the browser's initial #home fragment positioning after login.
+  window.requestAnimationFrame(scrollPageToTop);
   renderCaseRecommendation();
   if (tabName === "capability") {
     const routeAnalysisId = Number(options.params?.get("analysis"));

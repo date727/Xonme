@@ -294,10 +294,11 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 `build.ps1` 会执行以下工作：
 
-1. 检查 `config.json` 是否存在；
-2. 安装或更新 `requirements.txt` 中的依赖；
-3. 调用 PyInstaller 清理旧的临时构建结果；
-4. 将 Python、Uvicorn 和 `config.json` 打包成单文件 EXE。
+1. 优先使用 `collector\.venv\Scripts\python.exe`，未找到时才使用 PATH 中的 Python；
+2. 检查 `config.json` 是否存在；
+3. 安装或更新 `requirements.txt` 中的依赖；
+4. 调用 PyInstaller 清理旧的临时构建结果；
+5. 将 Python、Uvicorn 和 `config.json` 打包成单文件 EXE。
 
 生成文件：
 

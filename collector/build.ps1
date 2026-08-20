@@ -1,12 +1,49 @@
 $ErrorActionPreference = "Stop"
 $collectorRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $collectorRoot
+$configPath = Join-Path $collectorRoot "config.json"
+$requirementsPath = Join-Path $collectorRoot "requirements.txt"
+$entryPath = Join-Path $collectorRoot "main.py"
+$outputPath = Join-Path $collectorRoot "dist\C2Sherlock-Collector.exe"
+$venvPythonPath = Join-Path $collectorRoot ".venv\Scripts\python.exe"
 
-if (-not (Test-Path -LiteralPath (Join-Path $collectorRoot "config.json"))) {
-    throw "请先复制 config.json.example 为 config.json，并填写云端 API 与网页来源。"
+if (-not (Test-Path -LiteralPath $configPath)) {
+    throw "Missing collector/config.json. Copy config.json.example to config.json and configure it before building."
 }
 
-python -m pip install -r requirements.txt
-python -m PyInstaller --noconfirm --clean --onefile --name C2Sherlock-Collector --collect-all uvicorn --add-data "config.json;." main.py
+if (Test-Path -LiteralPath $venvPythonPath) {
+    $pythonPath = $venvPythonPath
+} else {
+    $pythonPath = (Get-Command python -ErrorAction Stop).Source
+    Write-Warning "collector/.venv was not found; using Python from PATH: $pythonPath"
+}
+Push-Location $collectorRoot
+try {
+    Write-Host "Using Python: $pythonPath"
+    & $pythonPath -m pip install -r $requirementsPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Dependency installation failed with exit code $LASTEXITCODE."
+    }
 
-Write-Host "Build complete: $collectorRoot\dist\C2Sherlock-Collector.exe"
+    $pyInstallerArguments = @(
+        "-m", "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onefile",
+        "--name", "C2Sherlock-Collector",
+        "--collect-all", "uvicorn",
+        "--add-data", "config.json;.",
+        $entryPath
+    )
+    & $pythonPath @pyInstallerArguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyInstaller failed with exit code $LASTEXITCODE."
+    }
+} finally {
+    Pop-Location
+}
+
+if (-not (Test-Path -LiteralPath $outputPath)) {
+    throw "PyInstaller finished without creating the expected executable: $outputPath"
+}
+
+Write-Host "Build complete: $outputPath"
