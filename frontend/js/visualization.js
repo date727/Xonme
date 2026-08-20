@@ -283,6 +283,12 @@
     const box = $("attribution-content"), attribution = dashboard?.attribution;
     if (!box) return;
     if (!attribution?.candidates?.length) {
+      const assessment = attribution?.assessment;
+      if (assessment) {
+        box.className = "attribution-detail";
+        box.innerHTML = `<article class="visualization-card"><div class="attribution-candidate-head"><h3>${escapeHtml(assessment.title || "正常通信评估")}</h3><span>${escapeHtml(assessment.label || "已完成")}</span></div><p>${escapeHtml(assessment.summary || "本次通信已完成检测。")}</p>${assessment.evidence ? `<div><b>评估依据</b><p>${escapeHtml(assessment.evidence)}</p></div>` : ""}${assessment.recommendation ? `<div><b>建议</b><p>${escapeHtml(assessment.recommendation)}</p></div>` : ""}</article>`;
+        return;
+      }
       box.className = "visualization-empty";
       box.textContent = "暂无候选归因结果。";
       return;

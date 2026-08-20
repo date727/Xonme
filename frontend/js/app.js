@@ -27,6 +27,14 @@ window.addEventListener("pageshow", (event) => {
 // reached through that same host on its fixed service port.
 const apiBase = `${window.location.protocol}//${window.location.hostname}:8765`;
 
+// Marked's bare-URL autolinker can treat Chinese punctuation and the following
+// Chinese text as part of a URL. Add a whitespace boundary after a plain URL
+// before parsing; explicit Markdown links remain intact.
+const separateBareUrlFromChineseText = (text) => text.replace(
+  /((?:https?:\/\/|www\.)[A-Za-z0-9][A-Za-z0-9._~:/?#\[\]@!$&'()*+=%\-]*)(?=[，。；：！？、】【、\u4e00-\u9fff])/g,
+  "$1 ",
+);
+
 const normalizeMarkdown = (value) => {
   let text = typeof value === "string" ? value : String(value ?? "");
   text = text.replace(/\r\n/g, "\n");
@@ -35,7 +43,7 @@ const normalizeMarkdown = (value) => {
   }
   const fenced = text.trim().match(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i);
   if (fenced) text = fenced[1];
-  return text.trim();
+  return separateBareUrlFromChineseText(text).trim();
 };
 
 // Safe markdown renderer — falls back to plain-text <pre> when marked is unavailable

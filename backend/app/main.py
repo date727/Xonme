@@ -92,7 +92,14 @@ PRECOMPUTED_SAMPLE_RESULTS = {
     "28a119538ecb509cee1deb9e4a465946537c3b23913873aaf570952dd43165d1": "cs4_amazon_http",
     "efc052a8172d7d76a34be5c98843278f3885b0e04494248093df753a89d5cf93": "benign5_smashburger",
 }
-PRECOMPUTED_SAMPLE_DURATION_SECONDS = 40
+PRECOMPUTED_SAMPLE_STAGES = (
+    ("zeek", 4),
+    ("rita", 9),
+    ("lstm", 8),
+    ("rag", 9),
+    ("ai", 10),
+)
+PRECOMPUTED_SAMPLE_DURATION_SECONDS = sum(duration for _, duration in PRECOMPUTED_SAMPLE_STAGES)
 
 app = FastAPI()
 app.include_router(auth_router)
@@ -1088,11 +1095,11 @@ def _stream_precomputed_sample_result(
     """Emit normal analysis progress over a fixed duration, then save cached output."""
 
     started_at = time.monotonic()
-    for index, step in enumerate(("zeek", "rita", "lstm", "rag", "ai")):
+    elapsed_seconds = 0
+    for step, duration in PRECOMPUTED_SAMPLE_STAGES:
         yield sse_event("step", step)
-        _wait_for_precomputed_sample_stage(
-            job, started_at + (index + 1) * PRECOMPUTED_SAMPLE_DURATION_SECONDS / 5
-        )
+        elapsed_seconds += duration
+        _wait_for_precomputed_sample_stage(job, started_at + elapsed_seconds)
 
     _raise_if_cancelled(job)
     dashboard = dict(dashboard)
